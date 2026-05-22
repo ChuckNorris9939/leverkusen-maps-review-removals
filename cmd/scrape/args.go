@@ -10,12 +10,14 @@ import (
 )
 
 type args struct {
+	City               string
 	Postcodes          []string
 	Queries            []string
 	MaxResults         int
 	Headless           bool
 	CDPURL             string
 	Discovery          string
+	Metadata           string
 	PlacesAPIDiscovery bool
 	PlacesAPIPageLimit int
 	DiscoveryOnly      bool
@@ -36,7 +38,10 @@ type args struct {
 
 func parseArgs(argv []string) (args, error) {
 	csvSet := false
+	postcodesSet := false
+	postcodesValue := ""
 	out := args{
+		City:               mapsreview.DefaultCity,
 		Postcodes:          mapsreview.NurembergPostcodes,
 		Queries:            mapsreview.DefaultQueries,
 		Headless:           false,
@@ -46,6 +51,7 @@ func parseArgs(argv []string) (args, error) {
 		NoticeAttempts:     2,
 		DashboardAddr:      ":8081",
 		Discovery:          mapsreview.DiscoveryJSON,
+		Metadata:           mapsreview.MetadataJSON,
 		PlacesAPIPageLimit: 1,
 		Out:                mapsreview.ResultsJSON,
 		CSV:                mapsreview.ResultsCSV,
@@ -56,7 +62,11 @@ func parseArgs(argv []string) (args, error) {
 	for i := 0; i < len(argv); i++ {
 		key, value, consume := mapsreview.SplitArg(argv, i)
 		switch key {
+		case "--city":
+			out.City = value
 		case "--postcodes":
+			postcodesSet = true
+			postcodesValue = strings.TrimSpace(value)
 			if value == "" || value == "all" {
 				out.Postcodes = mapsreview.NurembergPostcodes
 			} else {
@@ -72,6 +82,8 @@ func parseArgs(argv []string) (args, error) {
 			out.CDPURL = value
 		case "--discovery":
 			out.Discovery = value
+		case "--metadata":
+			out.Metadata = value
 		case "--places-api-discovery":
 			out.PlacesAPIDiscovery = true
 			consume = false
@@ -121,6 +133,13 @@ func parseArgs(argv []string) (args, error) {
 			i++
 		}
 	}
+	out.City = strings.TrimSpace(out.City)
+	if out.City == "" {
+		return out, fmt.Errorf("--city must not be empty")
+	}
+	if !mapsreview.IsDefaultCity(out.City) && (!postcodesSet || postcodesValue == "" || strings.EqualFold(postcodesValue, "all")) {
+		return out, fmt.Errorf("explicit --postcodes CSV is required when --city is not %s", mapsreview.DefaultCity)
+	}
 	if !csvSet && out.Out != "" {
 		out.CSV = strings.TrimSuffix(out.Out, filepath.Ext(out.Out)) + ".csv"
 	}
@@ -133,16 +152,18 @@ func printHelp() {
   go run ./cmd/scrape --postcodes 90402,90403 --queries restaurant,café,imbiss
 
 Options:
-  --postcodes <all|csv>     Nürnberg PLZ list. Default: all known Nürnberg PLZ.
+  --city <name>             City name for discovery. Default: %s. For other cities, pass --postcodes explicitly.
+  --postcodes <all|csv>     PLZ list. Default: all known Nürnberg PLZ.
   --queries <csv>           Google Maps search terms. Default: %s.
   --max-results <n>         Stop after n discovered places. 0 = unlimited.
   --headless <true|false>   Chrome headless mode. Default: false; safer for consent/CAPTCHA.
   --cdp-url <ws-url>        Experimental: use an existing CDP browser instead of Chrome, e.g. Lightpanda on ws://127.0.0.1:9333.
   --discovery <path>        Discovery JSON path. Default: output/discovery.json.
+  --metadata <path>         Metadata JSON path. Default: output/metadata.json.
   --places-api-discovery    Use official Places API Text Search ID-only discovery. Reads GOOGLE_MAPS_API_KEY from env or .env.
   --places-api-pages <n>    Places API result pages per postcode/query. Default: 1 (default searches stay under 1,000 requests/day).
-  --discovery-only          Only create/update output/discovery.json.
-  --scrape-only             Skip discovery; scrape output/discovery.json.
+  --discovery-only          Only create/update the discovery JSON.
+  --scrape-only             Skip discovery; scrape the discovery JSON.
   --rescrape-all, --all     Re-read every discovered place, including existing success rows.
   --banner-audit-only       Scan existing no-banner success rows for missed banners; only newly found banners are written.
   --allow-banner-clears     Allow a re-scrape to remove a previously seen deletion banner. Default: keep old banner until manually verified.
@@ -155,7 +176,8 @@ Options:
   --delay-max <ms>          Maximum delay between place pages. Default: 6000.
   --out <path>              Results JSON path. Default: output/places.json.
   --csv <path>              Results CSV path. Default: output/places.csv.
-`, strings.Join(mapsreview.DefaultQueries, ","))
+  --dashboard <addr>        Scrape dashboard listen address. Default: :8081.
+`, mapsreview.DefaultCity, strings.Join(mapsreview.DefaultQueries, ","))
 }
 
 func splitCSV(value string) []string {

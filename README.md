@@ -113,6 +113,7 @@ Ausgaben:
 Nützliche Optionen:
 
 ```bash
+--city Nürnberg
 --postcodes 90402,90403
 --queries restaurant,café,imbiss,pizzeria,bäckerei
 --discovery-only
@@ -126,7 +127,10 @@ Nützliche Optionen:
 --scrape-only --rescrape-all --resume-from 1288 --scrape-limit 200   # sichereren Teil-Scan ausführen
 --delay-min 4000 --delay-max 9000
 --out output/places.json --csv output/places.csv
+--discovery output/discovery.json --metadata output/metadata.json
 ```
+
+Für andere Städte kann `--city` den Suchort und die Darstellung anpassen. Dann muss die PLZ-Liste explizit per `--postcodes` übergeben werden, damit nicht versehentlich die Nürnberger Standard-PLZ genutzt werden. Die statistischen Bezirke und Kartenflächen sind Nürnberg-spezifisch; bei anderen Städten zeigt das Dashboard keine Nürnberger Bezirksflächen. Diagrammdateien nutzen für andere Städte einen City-Slug als Präfix, z. B. `fuerth_overall_summary.svg`.
 
 Optional kann der Scraper über CDP gegen einen bereits laufenden Browser wie Lightpanda laufen. Das ist experimentell; Chrome bleibt der Standard und war in Stichproben schneller:
 

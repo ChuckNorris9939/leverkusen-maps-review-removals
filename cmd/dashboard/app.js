@@ -1,4 +1,6 @@
 const COORD_SCALE = 100000;
+const CONFIG = JSON.parse(document.getElementById('dashboardConfig').textContent);
+const DASHBOARD_CITY = CONFIG.city || 'Nürnberg';
 const placesPayload = JSON.parse(document.getElementById('placesData').textContent);
 const DATA = placesPayload.r.map((row, index) => decodePlaceRow(row, index, placesPayload.d));
 let BEZIRKE = null;
@@ -24,12 +26,12 @@ function googleMapsURL(cidHex, name) {
   if (cidHex && typeof BigInt === 'function') {
     try { return 'https://www.google.com/maps?cid=' + BigInt('0x' + cidHex).toString(10); } catch (_) {}
   }
-  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((name || 'Nürnberg') + ' Nürnberg');
+  return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent((name || DASHBOARD_CITY) + ' ' + DASHBOARD_CITY);
 }
 function decodeAddress(value, postcode) {
   if (!value) return '';
   if (value[0] === '!') return value.slice(1);
-  return value + ', ' + postcode + ' Nürnberg';
+  return value + ', ' + postcode + ' ' + DASHBOARD_CITY;
 }
 function decodePlaceRow(row, index, dicts) {
   const postcode = dictValue(dicts, 0, row[2]);

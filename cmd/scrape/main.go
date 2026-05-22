@@ -31,8 +31,11 @@ func main() {
 }
 
 func run(args args) error {
-	if err := mapsreview.EnsureDirForPath(mapsreview.OutputDir); err != nil {
-		return err
+	for _, file := range []string{args.Out, args.CSV, args.Discovery, args.Metadata} {
+		dir := filepath.Dir(file)
+		if err := mapsreview.EnsureDirForPath(dir); err != nil {
+			return err
+		}
 	}
 	if err := mapsreview.EnsureDirForPath("debug"); err != nil {
 		return err
@@ -101,12 +104,14 @@ func newScrapeBrowserContext(args args) (context.Context, context.CancelFunc) {
 
 type metadata struct {
 	ReadAt             string   `json:"readAt"`
+	City               string   `json:"city"`
 	Postcodes          []string `json:"postcodes"`
 	Queries            []string `json:"queries"`
 	MaxResults         int      `json:"maxResults"`
 	Headless           bool     `json:"headless"`
 	CDPURL             string   `json:"cdpUrl,omitempty"`
 	Discovery          string   `json:"discovery"`
+	Metadata           string   `json:"metadata"`
 	PlacesAPIDiscovery bool     `json:"placesApiDiscovery"`
 	PlacesAPIPageLimit int      `json:"placesApiPageLimit"`
 	DiscoveryOnly      bool     `json:"discoveryOnly"`
@@ -132,12 +137,14 @@ type metadata struct {
 func writeMetadata(args args, discoveries []mapsreview.Discovery, rows []mapsreview.Place) error {
 	m := metadata{
 		ReadAt:             mapsreview.NowISO(),
+		City:               args.City,
 		Postcodes:          args.Postcodes,
 		Queries:            args.Queries,
 		MaxResults:         args.MaxResults,
 		Headless:           args.Headless,
 		CDPURL:             args.CDPURL,
 		Discovery:          args.Discovery,
+		Metadata:           args.Metadata,
 		PlacesAPIDiscovery: args.PlacesAPIDiscovery,
 		PlacesAPIPageLimit: args.PlacesAPIPageLimit,
 		DiscoveryOnly:      args.DiscoveryOnly,
@@ -164,7 +171,7 @@ func writeMetadata(args args, discoveries []mapsreview.Discovery, rows []mapsrev
 			m.Errors++
 		}
 	}
-	return mapsreview.WriteJSON(mapsreview.MetadataJSON, m)
+	return mapsreview.WriteJSON(args.Metadata, m)
 }
 
 func discoverPlaces(ctx context.Context, args args, dash *mapsreview.Dashboard) ([]mapsreview.Discovery, error) {
@@ -189,7 +196,7 @@ func discoverPlaces(ctx context.Context, args args, dash *mapsreview.Dashboard) 
 				stop = true
 				break
 			}
-			search := fmt.Sprintf("%s %s Nürnberg", query, postcode)
+			search := fmt.Sprintf("%s %s %s", query, postcode, args.City)
 			url := "https://www.google.com/maps/search/" + urlPathEscape(search) + "?hl=de"
 			fmt.Printf("\nDiscover: %s\n", search)
 			if err := navigate(ctx, url, 60*time.Second); err != nil {

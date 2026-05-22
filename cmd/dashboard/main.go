@@ -22,15 +22,11 @@ const (
 	defaultInput  = mapsreview.ResultsJSON
 	defaultOutput = "output/charts/nuernberg_dashboard.html"
 
-	siteURL         = "https://nuernberg-maps-review-removals.patwoz.dev/"
-	siteName        = "Nürnberg Maps Review Removals"
-	pageTitle       = "Nürnberg Google-Maps-Bewertungen: Löschbanner-Dashboard"
-	pageDescription = "Interaktives Nürnberg-Dashboard zu sichtbaren Google-Maps-Hinweisen auf entfernte Bewertungen: Löschbanner, Löschquoten, Karte und Daten-Explorer."
-	socialImageURL  = siteURL + "charts/nuernberg_overall_summary.png"
-	socialImageAlt  = "Diagramm zur Auswertung entfernter Google-Maps-Bewertungen in Nürnberg"
+	siteURL = "https://nuernberg-maps-review-removals.patwoz.dev/"
 )
 
 type args struct {
+	City   string
 	Input  string
 	Output string
 }
@@ -71,6 +67,55 @@ type seoStats struct {
 	Top             []clientRow
 }
 
+type dashboardMetadata struct {
+	SiteName        string
+	PageTitle       string
+	PageDescription string
+	CanonicalURL    string
+	SocialImageURL  string
+	SocialImageAlt  string
+}
+
+func dashboardMeta(city string) dashboardMetadata {
+	return dashboardMetadata{
+		SiteName:        fmt.Sprintf("%s Maps Review Removals", city),
+		PageTitle:       fmt.Sprintf("%s Google-Maps-Bewertungen: Löschbanner-Dashboard", city),
+		PageDescription: fmt.Sprintf("Interaktives %s-Dashboard zu sichtbaren Google-Maps-Hinweisen auf entfernte Bewertungen: Löschbanner, Löschquoten, Karte und Daten-Explorer.", city),
+		CanonicalURL:    siteURL,
+		SocialImageURL:  siteURL + "charts/" + dashboardChartFilePrefix(city) + "_overall_summary.png",
+		SocialImageAlt:  fmt.Sprintf("Diagramm zur Auswertung entfernter Google-Maps-Bewertungen in %s", city),
+	}
+}
+
+func dashboardChartFilePrefix(city string) string {
+	if mapsreview.IsDefaultCity(city) {
+		return "nuernberg"
+	}
+	city = strings.ToLower(strings.TrimSpace(city))
+	city = strings.NewReplacer(
+		"ä", "ae", "ö", "oe", "ü", "ue", "ß", "ss",
+	).Replace(city)
+	var b strings.Builder
+	lastDash := false
+	for _, r := range city {
+		isASCIIAlnum := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if isASCIIAlnum {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash && b.Len() > 0 {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	prefix := strings.Trim(b.String(), "-")
+	if prefix == "" {
+		return "city"
+	}
+	return prefix
+}
+
 func main() {
 	args, err := parseArgs(os.Args[1:])
 	if err != nil {
@@ -92,7 +137,7 @@ func run(args args) error {
 	if err := os.MkdirAll(filepath.Dir(args.Output), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(args.Output, []byte(makeHTML(data)), 0o644); err != nil {
+	if err := os.WriteFile(args.Output, []byte(makeHTML(args, data)), 0o644); err != nil {
 		return err
 	}
 	fmt.Printf("wrote %s\n", args.Output)
@@ -100,18 +145,26 @@ func run(args args) error {
 }
 
 func parseArgs(argv []string) (args, error) {
-	out := args{Input: defaultInput, Output: defaultOutput}
+	out := args{City: mapsreview.DefaultCity, Input: defaultInput, Output: defaultOutput}
 	for i := 0; i < len(argv); i++ {
 		key, value, consume := splitArg(argv, i)
 		switch key {
+		case "--city":
+			out.City = value
 		case "--input":
 			out.Input = value
 		case "--output":
 			out.Output = value
 		case "--help", "-h":
-			fmt.Println(`Usage:
+			fmt.Printf(`Usage:
   go run ./cmd/dashboard
-  go run ./cmd/dashboard --input output/places.json --output output/charts/nuernberg_dashboard.html`)
+  go run ./cmd/dashboard --input output/places.json --output output/charts/nuernberg_dashboard.html
+
+Options:
+  --city <name>       Displayed city name. Default: %s.
+  --input <path>      Scrape results JSON. Default: %s.
+  --output <path>     Dashboard HTML path. Default: %s.
+`, mapsreview.DefaultCity, defaultInput, defaultOutput)
 			os.Exit(0)
 		default:
 			return out, fmt.Errorf("unknown argument: %s", argv[i])
@@ -119,6 +172,10 @@ func parseArgs(argv []string) (args, error) {
 		if consume {
 			i++
 		}
+	}
+	out.City = strings.TrimSpace(out.City)
+	if out.City == "" {
+		return out, fmt.Errorf("--city must not be empty")
 	}
 	return out, nil
 }
@@ -184,9 +241,18 @@ func makeClientRows(rows []mapsreview.Place) []clientRow {
 	return out
 }
 
-func makeHTML(data []clientRow) string {
+func makeHTML(args args, data []clientRow) string {
+	city := strings.TrimSpace(args.City)
+	if city == "" {
+		city = mapsreview.DefaultCity
+	}
 	postcodes := uniqueSorted(data, func(row clientRow) string { return row.Postcode })
-	bezirke := allBezirkLabels()
+	bezirke := []string{}
+	bezirkBoundaries := []mapsreview.BezirkBoundary{}
+	if mapsreview.IsDefaultCity(city) {
+		bezirke = allBezirkLabels()
+		bezirkBoundaries = mapsreview.BezirkBoundaries()
+	}
 	if len(bezirke) == 0 {
 		bezirke = uniqueSorted(data, func(row clientRow) string { return row.BezirkLabel })
 	}
@@ -197,10 +263,12 @@ func makeHTML(data []clientRow) string {
 	snapshot := snapshotTime(data)
 	snapshotDisplay := snapshot.Format("02.01.2006")
 	stats := makeSEOStats(data, snapshotDisplay)
-	structuredData := structuredDataJSON(stats, snapshot)
+	meta := dashboardMeta(city)
+	structuredData := structuredDataJSON(stats, snapshot, city, meta)
 
-	jsonText := compactClientDataJSON(data)
-	bezirkText := compactBezirkDataJSON()
+	jsonText := compactClientDataJSON(data, city)
+	bezirkText := compactBezirkDataJSON(bezirkBoundaries)
+	configText := safeJSON(map[string]string{"city": city})
 
 	postcodeOptions := ""
 	for _, postcode := range postcodes {
@@ -607,14 +675,14 @@ __ANALYTICS__
     <div class="sitebar-inner">
       <div class="top-icons" aria-hidden="true"><span>●</span><span>☝</span><span>▰</span></div>
       <button class="theme-toggle" id="themeToggle" type="button" aria-label="Dunkles Design aktivieren" aria-pressed="false"><span class="theme-toggle-icon" aria-hidden="true">☾</span><span class="theme-toggle-text">Dunkel</span></button>
-      <div class="n-logo">Nürnberg</div>
+      <div class="n-logo">__CITY__</div>
     </div>
   </div>
 
   <section class="hero" aria-label="Seitentitel">
     <div class="hero-inner">
       <div class="hero-copy">
-        <h1 class="hero-title">Nürnberg Google-Maps-Bewertungen</h1>
+        <h1 class="hero-title">__CITY__ Google-Maps-Bewertungen</h1>
         <div class="hero-subtitle">Interaktives Daten-Dashboard zu sichtbaren Hinweisen auf entfernte Bewertungen wegen Diffamierungsbeschwerden.</div>
       </div>
       <aside class="appeal-box" aria-label="Hilfe bei entfernter eigener Bewertung">
@@ -728,6 +796,7 @@ __ANALYTICS_PRIVACY__
     </footer>
   </main>
 
+  <script id="dashboardConfig" type="application/json">__CONFIG__</script>
   <script id="placesData" type="application/json">__DATA__</script>
   <script id="bezirkData" type="application/json">__BEZIRK_DATA__</script>
   <script>
@@ -737,15 +806,16 @@ __DASHBOARD_JS__
 </html>`
 
 	return strings.NewReplacer(
-		"__PAGE_TITLE__", pageTitle,
-		"__PAGE_DESCRIPTION__", pageDescription,
-		"__CANONICAL_URL__", siteURL,
-		"__SITE_NAME__", siteName,
-		"__SOCIAL_IMAGE__", socialImageURL,
-		"__SOCIAL_IMAGE_ALT__", socialImageAlt,
+		"__PAGE_TITLE__", esc(meta.PageTitle),
+		"__PAGE_DESCRIPTION__", escAttr(meta.PageDescription),
+		"__CANONICAL_URL__", escAttr(meta.CanonicalURL),
+		"__SITE_NAME__", esc(meta.SiteName),
+		"__SOCIAL_IMAGE__", escAttr(meta.SocialImageURL),
+		"__SOCIAL_IMAGE_ALT__", escAttr(meta.SocialImageAlt),
 		"__MODIFIED_TIME__", snapshot.Format(time.RFC3339),
 		"__STRUCTURED_DATA__", structuredData,
-		"__SEO_SUMMARY__", seoSummaryHTML(stats),
+		"__CITY__", esc(city),
+		"__SEO_SUMMARY__", seoSummaryHTML(stats, city),
 		"__POSTCODE_OPTIONS__", postcodeOptions,
 		"__BEZIRK_OPTIONS__", bezirkOptions,
 		"__RANGE_OPTIONS__", rangeOptions,
@@ -754,6 +824,7 @@ __DASHBOARD_JS__
 		"__ANALYTICS__", plausibleAnalyticsSnippet(),
 		"__ANALYTICS_PRIVACY__", plausiblePrivacyNotice(),
 		"__SNAPSHOT__", snapshotDisplay,
+		"__CONFIG__", configText,
 		"__DATA__", jsonText,
 		"__BEZIRK_DATA__", bezirkText,
 	).Replace(page)
@@ -771,7 +842,7 @@ type stringDictionary struct {
 
 const compactCoordScale = 100000.0
 
-func compactClientDataJSON(data []clientRow) string {
+func compactClientDataJSON(data []clientRow, city string) string {
 	postcodes := newStringDictionary()
 	bezirke := newStringDictionary()
 	categories := newStringDictionary()
@@ -791,7 +862,7 @@ func compactClientDataJSON(data []clientRow) string {
 			compactIntPtr(row.ReviewCount),
 			categories.Add(row.Category),
 			parentCategories.Add(row.ParentCategory),
-			compactAddress(row.Address, row.Postcode),
+			compactAddress(row.Address, row.Postcode, city),
 			readAtMinute(row.ReadAt),
 		}
 		if row.HasBanner {
@@ -810,8 +881,7 @@ func compactClientDataJSON(data []clientRow) string {
 	})
 }
 
-func compactBezirkDataJSON() string {
-	boundaries := mapsreview.BezirkBoundaries()
+func compactBezirkDataJSON(boundaries []mapsreview.BezirkBoundary) string {
 	rows := make([][]interface{}, 0, len(boundaries))
 	for _, boundary := range boundaries {
 		polygons := make([][]int, 0, len(boundary.Polygons))
@@ -874,11 +944,11 @@ func compactCoordinate(value float64, base float64) int {
 	return int(math.Round((value - base) * compactCoordScale))
 }
 
-func compactAddress(address string, postcode string) string {
+func compactAddress(address string, postcode string, cityName string) string {
 	if address == "" {
 		return ""
 	}
-	city := postcode + " Nürnberg"
+	city := strings.TrimSpace(postcode + " " + cityName)
 	if address == city {
 		return ""
 	}
@@ -986,10 +1056,10 @@ func makeSEOStats(data []clientRow, snapshot string) seoStats {
 	return stats
 }
 
-func seoSummaryHTML(stats seoStats) string {
+func seoSummaryHTML(stats seoStats, city string) string {
 	return fmt.Sprintf(`<section class="card seo-summary" aria-labelledby="data-overview-title">
-      <h2 id="data-overview-title">Datenstand: Google-Maps-Bewertungen und Löschbanner in Nürnberg</h2>
-      <p>Dieses Dashboard macht öffentlich sichtbare Hinweise auf wegen Diffamierungsbeschwerden entfernte Google-Maps-Bewertungen in Nürnberg durchsuchbar. Die Karte, Filter und Ranglisten zeigen Löschbanner, geschätzte entfernte Bewertungen, Löschquoten und Worst-Case-Ratings je Ort.</p>
+      <h2 id="data-overview-title">Datenstand: Google-Maps-Bewertungen und Löschbanner in %s</h2>
+      <p>Dieses Dashboard macht öffentlich sichtbare Hinweise auf wegen Diffamierungsbeschwerden entfernte Google-Maps-Bewertungen in %s durchsuchbar. Die Karte, Filter und Ranglisten zeigen Löschbanner, geschätzte entfernte Bewertungen, Löschquoten und Worst-Case-Ratings je Ort.</p>
       <ul class="seo-facts">
         <li><strong>%s</strong> erfasste Orte</li>
         <li><strong>%s</strong> mit sichtbarem Löschbanner</li>
@@ -999,6 +1069,8 @@ func seoSummaryHTML(stats seoStats) string {
       <p class="seo-meta">Datenstand: %s. Kein sichtbarer Banner bedeutet nur, dass beim Scrape kein passender Hinweis sichtbar war.</p>
 %s
     </section>`,
+		esc(city),
+		esc(city),
 		mapsreview.FormatGermanInt(stats.Total),
 		mapsreview.FormatGermanInt(stats.Banners),
 		mapsreview.FormatGermanInt(stats.RemovedEstimate),
@@ -1043,15 +1115,15 @@ func seoTopListHTML(rows []clientRow) string {
 	return b.String()
 }
 
-func structuredDataJSON(stats seoStats, snapshot time.Time) string {
+func structuredDataJSON(stats seoStats, snapshot time.Time, city string, meta dashboardMetadata) string {
 	data := map[string]interface{}{
 		"@context": "https://schema.org",
 		"@graph": []map[string]interface{}{
 			{
 				"@type":      "WebSite",
-				"@id":        siteURL + "#website",
-				"url":        siteURL,
-				"name":       siteName,
+				"@id":        meta.CanonicalURL + "#website",
+				"url":        meta.CanonicalURL,
+				"name":       meta.SiteName,
 				"inLanguage": "de-DE",
 				"publisher": map[string]interface{}{
 					"@type": "Person",
@@ -1061,34 +1133,34 @@ func structuredDataJSON(stats seoStats, snapshot time.Time) string {
 			},
 			{
 				"@type":       "WebPage",
-				"@id":         siteURL + "#webpage",
-				"url":         siteURL,
-				"name":        pageTitle,
-				"description": pageDescription,
+				"@id":         meta.CanonicalURL + "#webpage",
+				"url":         meta.CanonicalURL,
+				"name":        meta.PageTitle,
+				"description": meta.PageDescription,
 				"isPartOf": map[string]interface{}{
-					"@id": siteURL + "#website",
+					"@id": meta.CanonicalURL + "#website",
 				},
 				"mainEntity": map[string]interface{}{
-					"@id": siteURL + "#dataset",
+					"@id": meta.CanonicalURL + "#dataset",
 				},
 				"primaryImageOfPage": map[string]interface{}{
 					"@type": "ImageObject",
-					"url":   socialImageURL,
+					"url":   meta.SocialImageURL,
 				},
 				"dateModified": snapshot.Format("2006-01-02"),
 				"inLanguage":   "de-DE",
 			},
 			{
 				"@type":                "Dataset",
-				"@id":                  siteURL + "#dataset",
-				"name":                 "Nürnberg Google-Maps-Bewertungen mit sichtbaren Löschbanner-Hinweisen",
-				"description":          pageDescription,
-				"url":                  siteURL,
+				"@id":                  meta.CanonicalURL + "#dataset",
+				"name":                 fmt.Sprintf("%s Google-Maps-Bewertungen mit sichtbaren Löschbanner-Hinweisen", city),
+				"description":          meta.PageDescription,
+				"url":                  meta.CanonicalURL,
 				"dateModified":         snapshot.Format("2006-01-02"),
 				"temporalCoverage":     snapshot.Format("2006-01-02"),
 				"measurementTechnique": "Scrape öffentlich sichtbarer Google-Maps-Ortsseiten",
 				"keywords": []string{
-					"Nürnberg",
+					city,
 					"Google Maps Bewertungen",
 					"entfernte Bewertungen",
 					"Löschbanner",
@@ -1096,7 +1168,7 @@ func structuredDataJSON(stats seoStats, snapshot time.Time) string {
 				},
 				"spatialCoverage": map[string]interface{}{
 					"@type": "City",
-					"name":  "Nürnberg",
+					"name":  city,
 				},
 				"variableMeasured": []string{
 					"Orte",
