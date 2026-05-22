@@ -48,6 +48,9 @@ func TestMakeHTMLIncludesSEOMetadataAndSummary(t *testing.T) {
 		`Dashboard basiert auf der MIT-lizenzierten Vorlage von Patrick Wozniak.`,
 		`Einordnung der Löschquote`,
 		`ratioHistogram`,
+		`Weitere regionale Dashboards`,
+		`https://bewertungsradar-saar.de/`,
+		`https://berlintrustindex.com/`,
 		`Top-Orte nach geschätzten entfernten Bewertungen`,
 		`Café &lt;Test&gt;`,
 	}

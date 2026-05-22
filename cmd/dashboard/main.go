@@ -557,10 +557,23 @@ __ANALYTICS__
     .show-more { display: block; min-width: 220px; height: 42px; margin: 14px auto 0; padding: 0 18px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-raised); color: var(--heading); font-weight: 700; cursor: pointer; }
     .show-more:hover, .show-more:focus-visible { border-color: var(--red); color: var(--red); outline: none; }
     .show-more[hidden] { display: none; }
+    .related-dashboards { padding: 18px; margin-top: 18px; }
+    .related-dashboards h2 { margin: 0 0 8px; color: var(--heading); font-size: 22px; font-weight: 700; }
+    .related-dashboards p { margin: 0 0 14px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+    .related-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    .related-link { display: block; min-height: 82px; padding: 12px; border: 1px solid var(--line); background: var(--surface-muted); color: var(--text); text-decoration: none; }
+    .related-link:hover, .related-link:focus-visible { border-color: var(--red); background: var(--row-hover); outline: none; text-decoration: none; }
+    .related-link strong { display: block; margin-bottom: 6px; color: var(--heading); font-size: 15px; line-height: 1.2; }
+    .related-link span { display: block; color: var(--muted); font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
     footer { margin-top: 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
     .footer-privacy, .footer-credit { margin-top: 6px; }
     .footer-credit a { font-weight: 700; }
-    @media (max-width: 1200px) { .hero-inner { grid-template-columns: 1fr; } .appeal-box { width: min(760px, 100%); } .kpis, .panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .controls { grid-template-columns: 1fr 1fr 1fr; } .search { grid-column: 1 / -1; } .theme-toggle { margin-left: auto; margin-right: 0; } .n-logo { position: relative; height: 76px; width: 150px; margin-left: 0; padding-top: 48px; } .n-logo::before { top: 40px; } .n-logo::after { top: 4px; } }
+    @media (min-width: 1600px) {
+      .table-wrap { margin: 0 calc(-1 * (100vw - min(1320px, calc(100vw - 32px))) / 2); }
+      table { min-width: 0; table-layout: auto; }
+      col.rank, col.name, col.bezirk, col.plz, col.rating, col.reviews, col.banner, col.removed, col.estimate, col.ratio, col.real, col.checked, col.category { width: auto; }
+    }
+    @media (max-width: 1200px) { .hero-inner { grid-template-columns: 1fr; } .appeal-box { width: min(760px, 100%); } .kpis, .panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .related-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .controls { grid-template-columns: 1fr 1fr 1fr; } .search { grid-column: 1 / -1; } .theme-toggle { margin-left: auto; margin-right: 0; } .n-logo { position: relative; height: 76px; width: 150px; margin-left: 0; padding-top: 48px; } .n-logo::before { top: 40px; } .n-logo::after { top: 4px; } }
     @media (max-width: 720px) {
       .sitebar-inner, main, .hero-inner { width: min(100vw - 20px, 1320px); }
       .sitebar-inner { gap: 14px; }
@@ -568,7 +581,7 @@ __ANALYTICS__
       .theme-toggle { width: 42px; padding: 0; justify-content: center; }
       .theme-toggle-text { display: none; }
       .n-logo { width: 128px; font-size: 18px; padding-left: 10px; padding-right: 10px; }
-      .kpis, .panel-grid, .seo-facts, .dist-grid { grid-template-columns: 1fr; }
+      .kpis, .panel-grid, .seo-facts, .dist-grid, .related-grid { grid-template-columns: 1fr; }
       .controls { position: sticky; top: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 10px; padding: 10px; margin-bottom: 14px; }
       .filter-toggle { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 42px; padding: 8px 12px; border: 0; border-radius: 5px; background: var(--control-bg); color: var(--control-text); text-align: left; cursor: pointer; }
       .filter-toggle strong { display: block; font-size: 15px; line-height: 1.1; }
@@ -694,6 +707,19 @@ __SEO_SUMMARY__
       </table>
     </section>
     <button class="show-more" id="showMoreRows" type="button" hidden>Mehr Zeilen anzeigen</button>
+
+    <section class="card related-dashboards" aria-label="Weitere regionale Dashboards">
+      <h2>Weitere regionale Dashboards</h2>
+      <p>Öffentlich verfügbare Dashboards anderer Regionen zum gleichen Google-Maps-Löschbanner-Thema.</p>
+      <div class="related-grid">
+        <a class="related-link" href="https://bewertungsradar-saar.de/" target="_blank" rel="noopener noreferrer"><strong>Saarland</strong><span>bewertungsradar-saar.de</span></a>
+        <a class="related-link" href="https://nekronomekron.github.io/landshut-maps-review-removals/" target="_blank" rel="noopener noreferrer"><strong>Landshut</strong><span>nekronomekron.github.io</span></a>
+        <a class="related-link" href="https://cooljackgi.github.io/giessen-maps-review-removals/" target="_blank" rel="noopener noreferrer"><strong>Gießen</strong><span>cooljackgi.github.io</span></a>
+        <a class="related-link" href="https://berlintrustindex.com/" target="_blank" rel="noopener noreferrer"><strong>Berlin Trust Index</strong><span>berlintrustindex.com</span></a>
+        <a class="related-link" href="https://hermes7654.github.io/ibbenbueren-review-removals/" target="_blank" rel="noopener noreferrer"><strong>Ibbenbüren / Münster</strong><span>hermes7654.github.io</span></a>
+      </div>
+    </section>
+
     <footer>
       <div>Dashboard basiert auf der MIT-lizenzierten Vorlage von Patrick Wozniak.</div>
       <div>Quelle: Google Maps, öffentlich sichtbare Banner. „Kein Banner“ heißt nur: im Scrape war kein passender Hinweis sichtbar. Snapshot: __SNAPSHOT__.</div>
