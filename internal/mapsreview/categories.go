@@ -24,6 +24,7 @@ type CategoryRules struct {
 // The last entry should have empty keywords as catch-all.
 type CategoryBucket struct {
 	Name     string   `json:"name"`
+	Parent   string   `json:"parent"`
 	Keywords []string `json:"keywords"`
 }
 
@@ -44,6 +45,21 @@ func LoadCategoryRules() *CategoryRules {
 		categoryRules = &rules
 	})
 	return categoryRules
+}
+
+// ParentCategory returns the parent group for a given category name.
+// Returns empty string if the category is unknown.
+func ParentCategory(category string) string {
+	rules := LoadCategoryRules()
+	for _, bucket := range rules.Categories {
+		if bucket.Name == category {
+			if bucket.Parent != "" {
+				return bucket.Parent
+			}
+			return bucket.Name
+		}
+	}
+	return ""
 }
 
 // NormalizeCategory maps a raw category string to a canonical bucket using the

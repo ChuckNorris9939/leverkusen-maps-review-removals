@@ -20,3 +20,15 @@ func EnrichPlaceLocation(row *Place) {
 		row.BezirkName = StringPtr(bezirk.Name)
 	}
 }
+
+func EnrichParentCategory(row *Place) {
+	if row == nil || row.Category == nil {
+		return
+	}
+	parent := ParentCategory(*row.Category)
+	if parent != "" && parent != *row.Category {
+		row.ParentCategory = StringPtr(parent)
+	} else {
+		row.ParentCategory = nil
+	}
+}

@@ -43,6 +43,9 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Install ImageMagick for social preview PNGs
+        run: sudo apt-get update && sudo apt-get install -y imagemagick
+
       - name: Show Chrome version
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_data }}
         run: |

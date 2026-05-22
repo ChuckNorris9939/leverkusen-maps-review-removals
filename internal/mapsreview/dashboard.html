@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nurnberg Scraper</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, monospace; padding: 16px; background: #1a1a2e; color: #e0e0e0; }
+  h1 { font-size: 1.1rem; color: #e94560; margin-bottom: 6px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .stat { background: #16213e; padding: 6px 12px; border-radius: 6px; font-size: 0.85rem; }
+  .stat strong { color: #e94560; }
+  .stat small { color: #888; font-size: 0.7rem; display: block; }
+  .phase { color: #0f3460; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem; }
+  .phase-discovery, .phase-starting { background: #e9a820; }
+  .phase-scraping { background: #e94560; }
+  .phase-done { background: #4caf50; }
+  pre { background: #16213e; padding: 12px; border-radius: 6px; font-size: 0.7rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; }
+  .error-block { background: #2d1220; border-left: 3px solid #e94560; padding: 10px 12px; border-radius: 0 6px 6px 0; margin-bottom: 8px; max-height: 25vh; overflow-y: auto; }
+  .error-block.hidden { display: none; }
+  .error-line { color: #f08a8a; font-size: 0.7rem; line-height: 1.5; white-space: pre-wrap; word-break: break-word; padding: 2px 0; border-bottom: 1px solid #3a1a2e; }
+  .section-title { font-size: 0.75rem; color: #e94560; margin-bottom: 4px; font-weight: bold; }
+  .bar { height: 4px; background: #16213e; border-radius: 2px; margin-bottom: 8px; }
+  .bar-fill { height: 100%; background: #e94560; border-radius: 2px; transition: width 1s; }
+</style>
+</head>
+<body>
+<h1>Nurnberg Maps Scraper</h1>
+<div class="bar"><div class="bar-fill" id="bar" style="width:0%"></div></div>
+<div class="row" id="stats">loading...</div>
+<div class="error-block hidden" id="errors"><div class="section-title">ERRORS</div><div id="error-lines"></div></div>
+<pre id="log">loading...</pre>
+<script>
+function n(n){return n!=null?n.toLocaleString():"?"}
+async function load() {
+  try {
+    let r = await fetch("/api");
+    let d = await r.json();
+    let pct = d.todo > 0 ? Math.round(d.scraped / d.todo * 100) : 0;
+    let pc = "phase-" + d.phase;
+    document.getElementById("stats").innerHTML =
+      '<div class="stat"><small>Places</small><strong>' + n(d.places) + '</strong></div>' +
+      '<div class="stat"><small>Scraped</small><strong>' + n(d.scraped) + ' / ' + n(d.todo) + '</strong> (' + pct + '%)</div>' +
+      '<div class="stat"><small>Elapsed</small><strong>' + d.elapsed + '</strong></div>' +
+      '<div class="stat"><small>ETA</small><strong>' + d.eta + '</strong></div>' +
+      '<div class="stat"><small>Speed</small><strong>' + d.speed + '/min</strong> (' + d.speed_hr + '/h)</div>' +
+      '<div class="stat"><small>Errors</small><strong>' + n(d.errors) + '</strong></div>' +
+      '<div class="stat"><small>Banners</small><strong>' + n(d.banners) + '</strong></div>' +
+      '<div class="stat"><span class="phase ' + pc + '">' + d.phase.toUpperCase() + '</span></div>';
+    let errDiv = document.getElementById("errors");
+    if (d.error_lines && d.error_lines.length > 0) {
+      errDiv.classList.remove("hidden");
+      document.getElementById("error-lines").innerHTML = d.error_lines.map(function(l) { return '<div class="error-line">' + l + '</div>'; }).join('');
+    } else {
+      errDiv.classList.add("hidden");
+    }
+    document.getElementById("log").textContent = d.tail;
+    document.getElementById("bar").style.width = pct + '%';
+    document.title = '[' + pct + '%] ' + d.phase + ' - ' + d.speed_hr + '/h';
+  } catch(e) {
+    document.getElementById("log").textContent = 'error: ' + e;
+  }
+}
+load();
+setInterval(load, 5000);
+</script>
+</body>
+</html>

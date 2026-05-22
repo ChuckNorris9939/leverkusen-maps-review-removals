@@ -10,27 +10,30 @@ import (
 )
 
 type args struct {
-	City              string
-	Postcodes         []string
-	Queries           []string
-	MaxResults        int
-	Headless          bool
-	CDPURL            string
-	DiscoveryOnly     bool
-	ScrapeOnly        bool
-	RescrapeAll       bool
-	BannerAuditOnly   bool
-	AllowBannerClears bool
-	NoticeAttempts    int
-	ScrapeStart       int
-	ScrapeLimit       int
-	SaveEvery         int
-	DelayMin          int
-	DelayMax          int
-	Out               string
-	CSV               string
-	Discovery         string
-	Metadata          string
+	City               string
+	Postcodes          []string
+	Queries            []string
+	MaxResults         int
+	Headless           bool
+	CDPURL             string
+	Discovery          string
+	Metadata           string
+	PlacesAPIDiscovery bool
+	PlacesAPIPageLimit int
+	DiscoveryOnly      bool
+	ScrapeOnly         bool
+	RescrapeAll        bool
+	BannerAuditOnly    bool
+	AllowBannerClears  bool
+	NoticeAttempts     int
+	ScrapeStart        int
+	ScrapeLimit        int
+	SaveEvery          int
+	DelayMin           int
+	DelayMax           int
+	Out                string
+	CSV                string
+	DashboardAddr      string
 }
 
 func parseArgs(argv []string) (args, error) {
@@ -38,20 +41,22 @@ func parseArgs(argv []string) (args, error) {
 	postcodesSet := false
 	postcodesValue := ""
 	out := args{
-		City:           mapsreview.DefaultCity,
-		Postcodes:      mapsreview.NurembergPostcodes,
-		Queries:        mapsreview.DefaultQueries,
-		Headless:       false,
-		DelayMin:       2500,
-		DelayMax:       6000,
-		SaveEvery:      1,
-		NoticeAttempts: 2,
-		Out:            mapsreview.ResultsJSON,
-		CSV:            mapsreview.ResultsCSV,
-		Discovery:      mapsreview.DiscoveryJSON,
-		Metadata:       mapsreview.MetadataJSON,
-		MaxResults:     0,
-		ScrapeStart:    1,
+		City:               mapsreview.DefaultCity,
+		Postcodes:          mapsreview.NurembergPostcodes,
+		Queries:            mapsreview.DefaultQueries,
+		Headless:           false,
+		DelayMin:           2500,
+		DelayMax:           6000,
+		SaveEvery:          1,
+		NoticeAttempts:     2,
+		DashboardAddr:      ":8081",
+		Discovery:          mapsreview.DiscoveryJSON,
+		Metadata:           mapsreview.MetadataJSON,
+		PlacesAPIPageLimit: 1,
+		Out:                mapsreview.ResultsJSON,
+		CSV:                mapsreview.ResultsCSV,
+		MaxResults:         0,
+		ScrapeStart:        1,
 	}
 
 	for i := 0; i < len(argv); i++ {
@@ -75,6 +80,15 @@ func parseArgs(argv []string) (args, error) {
 			out.Headless = mapsreview.ParseBool(value, true)
 		case "--cdp-url":
 			out.CDPURL = value
+		case "--discovery":
+			out.Discovery = value
+		case "--metadata":
+			out.Metadata = value
+		case "--places-api-discovery":
+			out.PlacesAPIDiscovery = true
+			consume = false
+		case "--places-api-pages":
+			out.PlacesAPIPageLimit = max(1, mapsreview.Atoi(value))
 		case "--discovery-only":
 			out.DiscoveryOnly = true
 			consume = false
@@ -107,10 +121,8 @@ func parseArgs(argv []string) (args, error) {
 		case "--csv":
 			out.CSV = value
 			csvSet = true
-		case "--discovery":
-			out.Discovery = value
-		case "--metadata":
-			out.Metadata = value
+		case "--dashboard":
+			out.DashboardAddr = value
 		case "--help", "-h":
 			printHelp()
 			os.Exit(0)
@@ -146,6 +158,10 @@ Options:
   --max-results <n>         Stop after n discovered places. 0 = unlimited.
   --headless <true|false>   Chrome headless mode. Default: false; safer for consent/CAPTCHA.
   --cdp-url <ws-url>        Experimental: use an existing CDP browser instead of Chrome, e.g. Lightpanda on ws://127.0.0.1:9333.
+  --discovery <path>        Discovery JSON path. Default: output/discovery.json.
+  --metadata <path>         Metadata JSON path. Default: output/metadata.json.
+  --places-api-discovery    Use official Places API Text Search ID-only discovery. Reads GOOGLE_MAPS_API_KEY from env or .env.
+  --places-api-pages <n>    Places API result pages per postcode/query. Default: 1 (default searches stay under 1,000 requests/day).
   --discovery-only          Only create/update the discovery JSON.
   --scrape-only             Skip discovery; scrape the discovery JSON.
   --rescrape-all, --all     Re-read every discovered place, including existing success rows.
@@ -160,8 +176,7 @@ Options:
   --delay-max <ms>          Maximum delay between place pages. Default: 6000.
   --out <path>              Results JSON path. Default: output/places.json.
   --csv <path>              Results CSV path. Default: output/places.csv.
-  --discovery <path>        Discovery JSON path. Default: output/discovery.json.
-  --metadata <path>         Metadata JSON path. Default: output/metadata.json.
+  --dashboard <addr>        Scrape dashboard listen address. Default: :8081.
 `, mapsreview.DefaultCity, strings.Join(mapsreview.DefaultQueries, ","))
 }
 

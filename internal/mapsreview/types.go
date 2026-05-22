@@ -26,6 +26,7 @@ type Place struct {
 	Rating              *float64 `json:"rating"`
 	ReviewCount         *int     `json:"reviewCount"`
 	Category            *string  `json:"category"`
+	ParentCategory      *string  `json:"parentCategory,omitempty"`
 	Lat                 *float64 `json:"lat,omitempty"`
 	Lng                 *float64 `json:"lng,omitempty"`
 	BezirkID            *string  `json:"bezirkId,omitempty"`

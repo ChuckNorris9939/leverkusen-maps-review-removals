@@ -105,6 +105,22 @@ func TestParseArgsSaveEvery(t *testing.T) {
 	}
 }
 
+func TestParseArgsPlacesAPI(t *testing.T) {
+	args, err := parseArgs([]string{"--places-api-discovery", "--places-api-pages", "2", "--discovery", "output/api.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !args.PlacesAPIDiscovery {
+		t.Fatal("PlacesAPIDiscovery = false, want true")
+	}
+	if args.PlacesAPIPageLimit != 2 {
+		t.Fatalf("PlacesAPIPageLimit = %d, want 2", args.PlacesAPIPageLimit)
+	}
+	if args.Discovery != "output/api.json" {
+		t.Fatalf("Discovery = %q", args.Discovery)
+	}
+}
+
 func TestParseArgsCDPURL(t *testing.T) {
 	args, err := parseArgs([]string{"--cdp-url", "ws://127.0.0.1:9333"})
 	if err != nil {

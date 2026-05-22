@@ -19,6 +19,7 @@ type discoveredAnchor struct {
 
 type mapText struct {
 	Title       string   `json:"title"`
+	URL         string   `json:"url"`
 	H1          string   `json:"h1"`
 	Category    string   `json:"category"`
 	Text        string   `json:"text"`
@@ -56,6 +57,14 @@ func waitForPlacePanel(ctx context.Context) error {
 
 func acceptConsent(ctx context.Context) error {
 	return mapsreview.AcceptConsent(ctx)
+}
+
+func waitForResolvedPlaceURL(ctx context.Context) error {
+	var ready bool
+	return mapsreview.RunWithTimeout(ctx, 5*time.Second, chromedp.Poll(`(() => {
+  const current = new URL(location.href);
+  return !current.searchParams.get('query_place_id') || current.pathname.includes('/maps/place/');
+})()`, &ready, chromedp.WithPollingInterval(150*time.Millisecond), chromedp.WithPollingTimeout(4*time.Second)))
 }
 
 func readPlaceAnchors(ctx context.Context) ([]discoveredAnchor, error) {
@@ -131,9 +140,28 @@ func readMapText(ctx context.Context) (mapText, error) {
     }
   }
 
+  const h1Text = document.querySelector('h1')?.textContent?.trim() || '';
+  let resolvedURL = location.href;
+  try {
+    const current = new URL(location.href);
+    const queryPlaceID = current.searchParams.get('query_place_id') || '';
+    if (queryPlaceID && !current.pathname.includes('/maps/place/')) {
+      const html = document.documentElement.innerHTML;
+      const mapsDataID = html.match(/0x[0-9a-f]+:0x[0-9a-f]+/i)?.[0] || '';
+      const center = window.APP_INITIALIZATION_STATE?.[0]?.[0] || [];
+      const lng = typeof center[1] === 'number' ? center[1] : null;
+      const lat = typeof center[2] === 'number' ? center[2] : null;
+      if (mapsDataID && lat !== null && lng !== null) {
+        const name = encodeURIComponent(h1Text || document.title.replace(/\s*-\s*Google Maps.*/i, '').trim() || 'place');
+        resolvedURL = 'https://www.google.com/maps/place/' + name + '/data=!4m6!3m5!1s' + mapsDataID + '!8m2!3d' + lat + '!4d' + lng + '!19s' + queryPlaceID + '?hl=de';
+      }
+    }
+  } catch (_) {}
+
   return {
     title: document.title,
-    h1: document.querySelector('h1')?.textContent?.trim() || '',
+    url: resolvedURL,
+    h1: h1Text,
     category,
     text: [document.body.innerText, ...attrTexts].join('\n'),
     rating: rating ? parseFloat(rating) : null,
@@ -141,6 +169,18 @@ func readMapText(ctx context.Context) (mapText, error) {
   };
 })()`, &out))
 	return out, err
+}
+
+func clickReviewsTab(ctx context.Context) (bool, error) {
+	var clicked bool
+	err := mapsreview.RunWithTimeout(ctx, 10*time.Second, chromedp.Evaluate(`(() => {
+  const candidates = Array.from(document.querySelectorAll('button, [role="tab"]'));
+  const tab = candidates.find(el => /^\s*(Rezensionen|Reviews)\s*$/i.test(el.innerText || el.textContent || ''));
+  if (!tab) return false;
+  tab.click();
+  return true;
+})()`, &clicked))
+	return clicked, err
 }
 
 func waitForDirectReviewsPanel(ctx context.Context) error {
@@ -171,6 +211,17 @@ func screenshot(ctx context.Context, file string) error {
 		return err
 	}
 	return os.WriteFile(file, buf, 0o644)
+}
+
+func htmlSnapshot(ctx context.Context, file string) error {
+	var html string
+	if err := mapsreview.RunWithTimeout(ctx, 15*time.Second, chromedp.OuterHTML("html", &html, chromedp.ByQuery)); err != nil {
+		return err
+	}
+	if err := mapsreview.EnsureDirForPath(file); err != nil {
+		return err
+	}
+	return os.WriteFile(file, []byte("<!doctype html>\n"+html), 0o644)
 }
 
 func safeFilename(value string) string {

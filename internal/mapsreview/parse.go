@@ -58,12 +58,12 @@ func incrementMapsDataCounts(base string, delta int) string {
 }
 
 func PlaceIDFromURL(raw string) string {
+	if id, ok := MapsDataPlaceIDFromURL(raw); ok {
+		return id
+	}
 	decoded, err := url.QueryUnescape(raw)
 	if err != nil {
 		decoded = raw
-	}
-	if match := regexp.MustCompile(`!1s([^!]+)`).FindStringSubmatch(decoded); len(match) > 1 {
-		return match[1]
 	}
 	place := "place"
 	if match := regexp.MustCompile(`/maps/place/([^/@?]+)`).FindStringSubmatch(decoded); len(match) > 1 {
@@ -74,6 +74,61 @@ func PlaceIDFromURL(raw string) string {
 		coords = match[1]
 	}
 	return place + ":" + coords
+}
+
+func MapsDataPlaceIDFromURL(raw string) (string, bool) {
+	decoded, err := url.QueryUnescape(raw)
+	if err != nil {
+		decoded = raw
+	}
+	if match := regexp.MustCompile(`!1s([^!/?&]+)`).FindStringSubmatch(decoded); len(match) > 1 {
+		return strings.TrimSpace(match[1]), true
+	}
+	return "", false
+}
+
+func MapsSearchResultPlaceIDFromURL(raw string) (string, bool) {
+	decoded, err := url.QueryUnescape(raw)
+	if err != nil {
+		decoded = raw
+	}
+	if match := regexp.MustCompile(`!19s([^!/?&]+)`).FindStringSubmatch(decoded); len(match) > 1 {
+		return strings.TrimSpace(match[1]), true
+	}
+	return "", false
+}
+
+func MapsQueryPlaceIDFromURL(raw string) (string, bool) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", false
+	}
+	id := strings.TrimSpace(u.Query().Get("query_place_id"))
+	return id, id != ""
+}
+
+func PlaceAliases(id, rawURL string) []string {
+	seen := map[string]bool{}
+	aliases := []string{}
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			return
+		}
+		seen[value] = true
+		aliases = append(aliases, value)
+	}
+	add(id)
+	if value, ok := MapsDataPlaceIDFromURL(rawURL); ok {
+		add(value)
+	}
+	if value, ok := MapsSearchResultPlaceIDFromURL(rawURL); ok {
+		add(value)
+	}
+	if value, ok := MapsQueryPlaceIDFromURL(rawURL); ok {
+		add(value)
+	}
+	return aliases
 }
 
 func ParseGermanNumber(value string) (float64, bool) {

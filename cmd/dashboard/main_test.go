@@ -44,3 +44,34 @@ func TestMakeClientRowsSkipsRowsWithoutRating(t *testing.T) {
 		t.Fatalf("row ID = %q, want with-rating", got[0].ID)
 	}
 }
+
+func TestMakeHTMLIncludesSEOMetadataAndSummary(t *testing.T) {
+	data := []clientRow{{
+		ID:              "test-place",
+		Name:            "Café <Test>",
+		Postcode:        "90402",
+		Rating:          mapsreview.FloatPtr(4.5),
+		ReviewCount:     mapsreview.IntPtr(120),
+		HasBanner:       true,
+		RemovedRange:    "21 bis 50",
+		RemovedEstimate: 35.5,
+		URL:             "https://example.com/maps",
+		ReadAt:          "2026-05-04T02:20:07Z",
+	}}
+
+	html := makeHTML(args{City: mapsreview.DefaultCity}, data)
+	checks := []string{
+		`<meta name="description" content="Interaktives Nürnberg-Dashboard`,
+		`<link rel="canonical" href="https://nuernberg-maps-review-removals.patwoz.dev/">`,
+		`<meta property="og:type" content="website">`,
+		`<script type="application/ld+json">`,
+		`<h1 class="hero-title">Nürnberg Google-Maps-Bewertungen</h1>`,
+		`Top-Orte nach geschätzten entfernten Bewertungen`,
+		`Café &lt;Test&gt;`,
+	}
+	for _, check := range checks {
+		if !strings.Contains(html, check) {
+			t.Fatalf("makeHTML missing %q", check)
+		}
+	}
+}

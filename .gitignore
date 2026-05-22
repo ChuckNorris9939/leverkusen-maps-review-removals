@@ -1,6 +1,7 @@
 debug/
 .playwright-mcp/
 .DS_Store
+.env
 *.log
 *.pid
 coverage.out

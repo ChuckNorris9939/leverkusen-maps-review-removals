@@ -21,7 +21,8 @@ Voraussetzungen:
 - Go 1.25+
 - Chrome oder Chromium im `PATH` oder an einem Standard-Installationsort
 - Optional als experimentelles CDP-Backend: Lightpanda
-- Optional für PNG-Export: ImageMagick `magick`
+- Optional für Places-API-Discovery: Google Places API (New)-API-Key in `.env` (siehe `.env.example`)
+- Optional für PNG-Export: ImageMagick `magick` oder `convert`
 
 ```bash
 make setup
@@ -29,11 +30,68 @@ make setup
 go mod download
 ```
 
+Für die optionale Places-API-Discovery:
+
+```bash
+cp .env.example .env
+# GOOGLE_MAPS_API_KEY in .env setzen
+```
+
+`.env` wird nur beim Lauf mit `--places-api-discovery` gelesen und bleibt lokal/git-ignoriert.
+
 ## 1) Daten sammeln
 
 Standardmäßig nutzt der Scraper Chrome. Er liest die normale Google-Maps-Seite für Metadaten und die direkte Rezensionen-URL für Rating, Rezensionszahl und Löschbanner, weil die normale Maps-Ansicht Löschbanner teils nicht im DOM enthält.
 
-Vollständiger Nürnberg-Lauf:
+Der Workflow ist immer zweistufig:
+
+1. **Discovery** schreibt/erweitert `output/discovery.json`.
+2. **Scrape** liest `output/discovery.json`, öffnet die Orte in Google Maps im Browser und schreibt `output/places.json` / `output/places.csv`.
+
+Die Löschbanner-Erkennung passiert in beiden Varianten im Browser auf Google Maps. Die Places API wird nur optional für Discovery verwendet.
+
+### Variante A: Discovery ohne Places API
+
+Diese Variante nutzt nur den Browser: Google-Maps-Suchen werden geöffnet, sichtbare Ergebnislinks gesammelt und danach gescrapt.
+
+```bash
+# 1. Orte über Google-Maps-Suchergebnisse finden
+make scrape ARGS="--discovery-only --postcodes all --headless=false"
+
+# 2. Gefundene Orte im Browser scrapen, inklusive Rezensionen/Löschbanner
+make scrape ARGS="--scrape-only --headless=false"
+```
+
+Vorteile: kein API-Key, keine Google-Cloud-Quota, kein API-Billing-Risiko. Nachteile: langsamer, stärker abhängig von der Google-Maps-Oberfläche und der sichtbaren Ergebnisliste.
+
+### Variante B: Discovery mit Places API
+
+Diese Variante nutzt die offizielle Places API (New) nur für die Ortssuche. Die Text-Search-Anfrage ist bewusst auf ID-only-Felder beschränkt:
+
+```text
+places.id,nextPageToken
+```
+
+Danach ist der Ablauf identisch: Die gefundenen `ChIJ...`-Place-IDs werden als Google-Maps-URLs in `output/discovery.json` gespeichert und im Browser gescrapt. Beim Scrape löst Google Maps die URL auf eine kanonische `/maps/place/.../data=...` URL auf; diese wird anschließend in `output/places.json` gespeichert, damit spätere Läufe direktere Maps-URLs/IDs haben.
+
+```bash
+# 1. Orte über Places API Text Search finden
+make scrape ARGS="--places-api-discovery --discovery-only --places-api-pages 1"
+
+# 2. Gefundene Orte im Browser scrapen, inklusive Rezensionen/Löschbanner
+make scrape ARGS="--scrape-only --headless=false"
+```
+
+Für tiefere Discovery, wenn die Tagesquota entsprechend gesetzt ist:
+
+```bash
+make scrape ARGS="--places-api-discovery --discovery-only --places-api-pages 2"
+make scrape ARGS="--scrape-only --headless=false"
+```
+
+Vorteile: bessere und stabilere Discovery-Abdeckung. Nachteile: API-Key, Quota-Management und Billing-Monitoring nötig. Die API liefert keine Löschbanner; dafür bleibt immer der Browser-Scrape nötig.
+
+Vollständiger Nürnberg-Lauf mit der Standard-Browser-Discovery:
 
 ```bash
 make scrape ARGS="--postcodes all --headless=false"
@@ -59,6 +117,8 @@ Nützliche Optionen:
 --postcodes 90402,90403
 --queries restaurant,café,imbiss,pizzeria,bäckerei
 --discovery-only
+--places-api-discovery --discovery-only   # experimentell: offizielle Places API Text Search, ID-only/no-cost-SKU laut Google-Preisliste; liest GOOGLE_MAPS_API_KEY aus Umgebung oder .env
+--places-api-pages 1                       # API-Seiten pro PLZ/Suche; Default 1 hält die Standardsuchen unter 1.000 Requests/Tag
 --scrape-only
 --scrape-only --rescrape-all   # alle gefundenen Orte erneut lesen, auch bereits erfolgreiche
 --scrape-only --rescrape-all --allow-banner-clears   # zuvor erkannte Banner nach manueller Prüfung entfernen lassen
@@ -120,7 +180,7 @@ Ausgaben:
 - `output/charts/nuernberg_most_removed.md`
 - `output/charts/nuernberg_most_removed.html`
 
-Wenn `magick` nicht installiert ist, überspringt `--png` die PNG-Dateien und schreibt weiterhin SVGs.
+Wenn ImageMagick nicht installiert ist, überspringt `--png` die PNG-Dateien und schreibt weiterhin SVGs.
 
 Die erzeugten Diagramm- und Dashboard-Dateien unter `output/charts/` werden von git ignoriert. Im Repository bleiben nur die Scrape-Snapshots (`output/places.json`, `output/places.csv`, `output/metadata.json`, optional `output/discovery.json`) versioniert; `make site` baut daraus `public/` für GitHub Pages neu.
 

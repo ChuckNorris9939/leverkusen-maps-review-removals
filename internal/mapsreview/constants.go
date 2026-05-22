@@ -24,8 +24,23 @@ var NurembergPostcodes = []string{
 }
 
 var DefaultQueries = []string{
+	// Gastro (original)
 	"restaurant", "café", "imbiss", "pizzeria", "bäckerei",
 	"döner", "burger", "sushi", "schnitzel", "frühstück", "brunch",
+	// Bars & Nightlife
+	"bar", "kneipe", "pub", "biergarten", "brauerei",
+	"cocktail bar", "lounge", "weinstube",
+	"club", "nachtclub", "diskothek",
+	// Hotels
+	"hotel",
+	// Beauty & Wellness
+	"friseur", "barbier", "barbershop",
+	"fitnessstudio", "fitness",
+	// Shopping & Daily
+	"supermarkt", "metzgerei",
+	"apotheke",
+	// Services
+	"tankstelle",
 }
 
 var NurembergPostcodeSet = func() map[string]bool {

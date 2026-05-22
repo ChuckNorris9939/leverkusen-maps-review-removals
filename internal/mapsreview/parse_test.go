@@ -167,6 +167,25 @@ func TestParseGermanNumber(t *testing.T) {
 	}
 }
 
+func TestPlaceAliasesIncludesMapsDataAndPlacesAPIIDs(t *testing.T) {
+	raw := "https://www.google.com/maps/place/FranKonya/data=!4m7!3m6!1s0x479f57a73350aed5:0xef0321790f9cee83!8m2!3d49.4471632!4d11.0647079!16s%2Fg%2F11t1h2jrkw!19sChIJ1a5QM6dXn0cRg-6cD3khA-8?authuser=0&hl=de&rclk=1"
+	aliases := strings.Join(PlaceAliases("", raw), "\n")
+	if !strings.Contains(aliases, "0x479f57a73350aed5:0xef0321790f9cee83") {
+		t.Fatalf("aliases %q do not include Maps data ID", aliases)
+	}
+	if !strings.Contains(aliases, "ChIJ1a5QM6dXn0cRg-6cD3khA-8") {
+		t.Fatalf("aliases %q do not include Places API ID", aliases)
+	}
+}
+
+func TestPlaceAliasesIncludesQueryPlaceID(t *testing.T) {
+	raw := "https://www.google.com/maps/search/?api=1&hl=de&query=restaurant+90402+N%C3%BCrnberg&query_place_id=ChIJ1a5QM6dXn0cRg-6cD3khA-8"
+	aliases := strings.Join(PlaceAliases("", raw), "\n")
+	if !strings.Contains(aliases, "ChIJ1a5QM6dXn0cRg-6cD3khA-8") {
+		t.Fatalf("aliases %q do not include query_place_id", aliases)
+	}
+}
+
 func TestReviewsURLFromURL(t *testing.T) {
 	raw := "https://www.google.com/maps/place/FranKonya/data=!4m7!3m6!1s0x479f57a73350aed5:0xef0321790f9cee83!8m2!3d49.4471632!4d11.0647079!16s%2Fg%2F11t1h2jrkw!19sChIJ1a5QM6dXn0cRg-6cD3khA-8?authuser=0&hl=de&rclk=1"
 	got := ReviewsURLFromURL(raw)
