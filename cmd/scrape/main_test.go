@@ -35,6 +35,66 @@ func TestIsRestrictedMapsView(t *testing.T) {
 	}
 }
 
+func TestParseArgsCustomCityRequiresExplicitPostcodes(t *testing.T) {
+	_, err := parseArgs([]string{"--city", "Fürth"})
+	if err == nil || !strings.Contains(err.Error(), "--postcodes") {
+		t.Fatalf("parseArgs custom city error = %v, want --postcodes error", err)
+	}
+}
+
+func TestParseArgsCustomCityRejectsAllPostcodes(t *testing.T) {
+	_, err := parseArgs([]string{"--city", "Fürth", "--postcodes", "all"})
+	if err == nil || !strings.Contains(err.Error(), "explicit --postcodes CSV") {
+		t.Fatalf("parseArgs custom city all-postcodes error = %v, want explicit CSV error", err)
+	}
+}
+
+func TestParseArgsCustomCityPaths(t *testing.T) {
+	args, err := parseArgs([]string{"--city", "Fürth", "--postcodes", "90762,90763", "--discovery", "output/fuerth_discovery.json", "--metadata", "output/fuerth_metadata.json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if args.City != "Fürth" {
+		t.Fatalf("City = %q, want Fürth", args.City)
+	}
+	if got := strings.Join(args.Postcodes, ","); got != "90762,90763" {
+		t.Fatalf("Postcodes = %q, want 90762,90763", got)
+	}
+	if args.Discovery != "output/fuerth_discovery.json" {
+		t.Fatalf("Discovery = %q", args.Discovery)
+	}
+	if args.Metadata != "output/fuerth_metadata.json" {
+		t.Fatalf("Metadata = %q", args.Metadata)
+	}
+}
+
+func TestParseArgsRejectsEmptyCity(t *testing.T) {
+	if _, err := parseArgs([]string{"--city"}); err == nil {
+		t.Fatal("parseArgs(--city) succeeded, want error")
+	}
+}
+
+func TestWriteMetadataIncludesCustomPaths(t *testing.T) {
+	file := t.TempDir() + "/metadata.json"
+	in := args{
+		City:      mapsreview.DefaultCity,
+		Out:       "custom/places.json",
+		CSV:       "custom/places.csv",
+		Discovery: "custom/discovery.json",
+		Metadata:  file,
+	}
+	if err := writeMetadata(in, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := mapsreview.ReadJSON(file, metadata{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Discovery != in.Discovery || got.Metadata != file {
+		t.Fatalf("metadata paths = (%q, %q), want (%q, %q)", got.Discovery, got.Metadata, in.Discovery, file)
+	}
+}
+
 func TestParseArgsSaveEvery(t *testing.T) {
 	args, err := parseArgs([]string{"--save-every", "25"})
 	if err != nil {

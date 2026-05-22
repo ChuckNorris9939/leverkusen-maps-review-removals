@@ -1,10 +1,34 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"nuernberg-maps-review-removals/internal/mapsreview"
 )
+
+func TestMakeHTMLEscapesCity(t *testing.T) {
+	page := makeHTML(args{City: `<script>alert("x")</script>`}, nil)
+	if strings.Contains(page, `<script>alert`) {
+		t.Fatal("city was inserted as raw HTML")
+	}
+	if !strings.Contains(page, `&lt;script&gt;alert`) {
+		t.Fatal("escaped city is missing from HTML")
+	}
+}
+
+func TestMakeHTMLCustomCityOmitsNurembergBoundaries(t *testing.T) {
+	page := makeHTML(args{City: "Fürth"}, nil)
+	if !strings.Contains(page, `<script id="bezirkData" type="application/json">[]</script>`) {
+		t.Fatal("custom-city dashboard should not include Nürnberg district boundaries")
+	}
+}
+
+func TestParseArgsRejectsEmptyCity(t *testing.T) {
+	if _, err := parseArgs([]string{"--city"}); err == nil {
+		t.Fatal("parseArgs(--city) succeeded, want error")
+	}
+}
 
 func TestMakeClientRowsSkipsRowsWithoutRating(t *testing.T) {
 	rows := []mapsreview.Place{

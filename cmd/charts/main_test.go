@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"strings"
 	"testing"
 
 	"nuernberg-maps-review-removals/internal/mapsreview"
@@ -74,10 +76,72 @@ func TestEsc(t *testing.T) {
 	}
 }
 
+func TestWriteMostRemovedMDEscapesCity(t *testing.T) {
+	file := t.TempDir() + "/most.md"
+	if err := writeMostRemovedMD(file, nil, args{City: `<img src=x onerror=alert(1)>`}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	markdown := string(data)
+	if strings.Contains(markdown, `<img src=x`) {
+		t.Fatal("city was inserted as raw Markdown HTML")
+	}
+	if !strings.Contains(markdown, `&lt;img src=x`) {
+		t.Fatal("escaped city is missing from Markdown")
+	}
+}
+
+func TestWriteMostRemovedHTMLEscapesCity(t *testing.T) {
+	file := t.TempDir() + "/most.html"
+	if err := writeMostRemovedHTML(file, nil, nil, args{City: `<img src=x onerror=alert(1)>`}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	html := string(data)
+	if strings.Contains(html, `<img src=x`) {
+		t.Fatal("city was inserted as raw HTML")
+	}
+	if !strings.Contains(html, `&lt;img src=x`) {
+		t.Fatal("escaped city is missing from HTML")
+	}
+}
+
+func TestChartFilePrefix(t *testing.T) {
+	tests := []struct {
+		city string
+		want string
+	}{
+		{city: mapsreview.DefaultCity, want: "nuernberg"},
+		{city: "Fürth", want: "fuerth"},
+		{city: "München Süd", want: "muenchen-sued"},
+		{city: "***", want: "city"},
+	}
+	for _, test := range tests {
+		if got := chartFilePrefix(test.city); got != test.want {
+			t.Fatalf("chartFilePrefix(%q) = %q, want %q", test.city, got, test.want)
+		}
+	}
+}
+
+func TestParseArgsChartsRejectsEmptyCity(t *testing.T) {
+	if _, err := parseArgs([]string{"--city"}); err == nil {
+		t.Fatal("parseArgs(--city) succeeded, want error")
+	}
+}
+
 func TestParseArgsChartsDefaults(t *testing.T) {
 	args, err := parseArgs(nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if args.City != mapsreview.DefaultCity {
+		t.Fatalf("City = %q, want %q", args.City, mapsreview.DefaultCity)
 	}
 	if args.Top != 30 {
 		t.Fatalf("Top = %d, want 30", args.Top)
