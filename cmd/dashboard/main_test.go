@@ -74,7 +74,7 @@ func TestMakeHTMLIncludesSEOMetadataAndSummary(t *testing.T) {
 		`Weitere regionale Dashboards`,
 		`https://bewertungsradar-saar.de/`,
 		`https://berlintrustindex.com/`,
-		`Top-Orte nach geschätzten entfernten Bewertungen`,
+		`Kurzüberblick: Orte mit den meisten Löschhinweisen`,
 		`Café &lt;Test&gt;`,
 	}
 	for _, check := range checks {

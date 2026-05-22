@@ -1085,7 +1085,7 @@ func seoTopListHTML(rows []clientRow) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(`<div class="seo-top"><h3>Top-Orte nach geschätzten entfernten Bewertungen</h3><ol>`)
+	b.WriteString(`<div class="seo-top"><h3>Kurzüberblick: Orte mit den meisten Löschhinweisen</h3><ol>`)
 	for _, row := range rows {
 		label := esc(row.Name)
 		if row.URL != "" {
