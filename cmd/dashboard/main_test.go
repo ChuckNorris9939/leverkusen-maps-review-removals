@@ -43,12 +43,19 @@ func TestMakeHTMLIncludesSEOMetadataAndSummary(t *testing.T) {
 		`<meta property="og:type" content="website">`,
 		`<script type="application/ld+json">`,
 		`<h1 class="hero-title">Nürnberg Google-Maps-Bewertungen</h1>`,
+		`Eigene Bewertung entfernt?`,
+		`Google-Einspruch`,
 		`Top-Orte nach geschätzten entfernten Bewertungen`,
 		`Café &lt;Test&gt;`,
 	}
 	for _, check := range checks {
 		if !strings.Contains(html, check) {
 			t.Fatalf("makeHTML missing %q", check)
+		}
+	}
+	for _, unwanted := range []string{`Streitbeilegung`, `platform-control.com`} {
+		if strings.Contains(html, unwanted) {
+			t.Fatalf("makeHTML contains unwanted %q", unwanted)
 		}
 	}
 }

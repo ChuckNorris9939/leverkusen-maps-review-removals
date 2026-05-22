@@ -434,9 +434,15 @@ __ANALYTICS__
     .n-logo::before { content: ""; position: absolute; left: 14px; right: 14px; top: 58px; height: 2px; background: #fff; opacity: .9; }
     .n-logo::after { content: "⌂⌂"; position: absolute; right: 13px; top: 20px; color: #fff; font-size: 36px; letter-spacing: -12px; transform: scaleX(1.4); }
     .hero { min-height: 380px; margin: 0 0 30px; background: var(--hero-bg); display: flex; align-items: end; }
-    .hero-inner { width: min(1320px, calc(100vw - 32px)); margin: 0 auto; padding: 140px 0 42px; }
+    .hero-inner { width: min(1320px, calc(100vw - 32px)); margin: 0 auto; padding: 120px 0 42px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px); gap: 22px; align-items: end; }
     .hero-title { width: min(760px, 100%); margin: 0; padding: 24px 28px; background: var(--hero-title-bg); color: #fff; font-size: clamp(32px, 4vw, 52px); line-height: 1.12; font-weight: 400; }
     .hero-subtitle { width: min(760px, 100%); margin-top: 14px; padding: 18px 22px; background: var(--surface-raised); border-radius: 5px; box-shadow: var(--shadow); color: var(--muted); font-size: 20px; line-height: 1.45; }
+    .appeal-box { padding: 18px; border: 1px solid var(--line); border-top: 5px solid var(--blue); background: var(--surface-raised); box-shadow: var(--shadow); color: var(--text); }
+    .appeal-box h2 { margin: 0 0 8px; color: var(--heading); font-size: 20px; line-height: 1.2; }
+    .appeal-box p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+    .appeal-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+    .appeal-actions a { display: inline-flex; align-items: center; min-height: 34px; padding: 0 11px; border-radius: 4px; background: var(--control-bg); color: var(--control-text); font-size: 13px; font-weight: 700; text-decoration: none; }
+    .appeal-actions a:hover, .appeal-actions a:focus-visible { background: var(--red); color: #fff; outline: none; }
     main { width: min(1320px, calc(100vw - 32px)); margin: 0 auto 70px; }
     .controls { position: sticky; top: 0; z-index: 2000; display: grid; grid-template-columns: minmax(200px, 1fr) 120px 170px 130px 130px 130px 95px auto; gap: 12px; align-items: end; padding: 16px; margin: 0 0 24px; background: var(--surface-raised); border: 1px solid var(--line); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
@@ -551,7 +557,7 @@ __ANALYTICS__
     footer { margin-top: 18px; color: var(--muted); font-size: 13px; line-height: 1.5; }
     .footer-privacy, .footer-credit { margin-top: 6px; }
     .footer-credit a { font-weight: 700; }
-    @media (max-width: 1200px) { .kpis, .panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .controls { grid-template-columns: 1fr 1fr 1fr; } .search { grid-column: 1 / -1; } .theme-toggle { margin-left: auto; margin-right: 0; } .n-logo { position: relative; height: 76px; width: 150px; margin-left: 0; padding-top: 48px; } .n-logo::before { top: 40px; } .n-logo::after { top: 4px; } }
+    @media (max-width: 1200px) { .hero-inner { grid-template-columns: 1fr; } .appeal-box { width: min(760px, 100%); } .kpis, .panel-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .controls { grid-template-columns: 1fr 1fr 1fr; } .search { grid-column: 1 / -1; } .theme-toggle { margin-left: auto; margin-right: 0; } .n-logo { position: relative; height: 76px; width: 150px; margin-left: 0; padding-top: 48px; } .n-logo::before { top: 40px; } .n-logo::after { top: 4px; } }
     @media (max-width: 720px) {
       .sitebar-inner, main, .hero-inner { width: min(100vw - 20px, 1320px); }
       .sitebar-inner { gap: 14px; }
@@ -572,9 +578,11 @@ __ANALYTICS__
       input, select { height: 38px; padding: 0 9px; font-size: 15px; }
       .reset { height: 34px; padding: 0 10px; font-size: 13px; }
       .hero { min-height: 300px; }
-      .hero-inner { padding-top: 92px; }
+      .hero-inner { padding-top: 92px; gap: 14px; }
       .hero-title { font-size: 32px; padding: 18px; }
       .hero-subtitle { font-size: 16px; }
+      .appeal-box { padding: 16px; }
+      .appeal-box h2 { font-size: 19px; }
     }
   </style>
 </head>
@@ -589,8 +597,15 @@ __ANALYTICS__
 
   <section class="hero" aria-label="Seitentitel">
     <div class="hero-inner">
-      <h1 class="hero-title">Nürnberg Google-Maps-Bewertungen</h1>
-      <div class="hero-subtitle">Interaktives Daten-Dashboard zu sichtbaren Hinweisen auf entfernte Bewertungen wegen Diffamierungsbeschwerden.</div>
+      <div class="hero-copy">
+        <h1 class="hero-title">Nürnberg Google-Maps-Bewertungen</h1>
+        <div class="hero-subtitle">Interaktives Daten-Dashboard zu sichtbaren Hinweisen auf entfernte Bewertungen wegen Diffamierungsbeschwerden.</div>
+      </div>
+      <aside class="appeal-box" aria-label="Hilfe bei entfernter eigener Bewertung">
+        <h2>Eigene Bewertung entfernt?</h2>
+        <p>Wenn eine eigene Google-Maps-Bewertung aus deiner Sicht zu Unrecht entfernt wurde, kannst du bei Google Einspruch einlegen. Keine Erfolgsgarantie.</p>
+        <div class="appeal-actions"><a href="https://support.google.com/maps/answer/16673099?hl=de" target="_blank" rel="noopener noreferrer">Google-Einspruch</a></div>
+      </aside>
     </div>
   </section>
 
