@@ -45,6 +45,7 @@ func TestMakeHTMLIncludesSEOMetadataAndSummary(t *testing.T) {
 		`<h1 class="hero-title">Nürnberg Google-Maps-Bewertungen</h1>`,
 		`Eigene Bewertung entfernt?`,
 		`Google-Einspruch`,
+		`Dashboard basiert auf der MIT-lizenzierten Vorlage von Patrick Wozniak.`,
 		`Top-Orte nach geschätzten entfernten Bewertungen`,
 		`Café &lt;Test&gt;`,
 	}

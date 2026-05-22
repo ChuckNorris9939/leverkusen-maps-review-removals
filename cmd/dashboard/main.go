@@ -687,6 +687,7 @@ __SEO_SUMMARY__
     </section>
     <button class="show-more" id="showMoreRows" type="button" hidden>Mehr Zeilen anzeigen</button>
     <footer>
+      <div>Dashboard basiert auf der MIT-lizenzierten Vorlage von Patrick Wozniak.</div>
       <div>Quelle: Google Maps, öffentlich sichtbare Banner. „Kein Banner“ heißt nur: im Scrape war kein passender Hinweis sichtbar. Snapshot: __SNAPSHOT__.</div>
 __ANALYTICS_PRIVACY__
       <div class="footer-credit">© 2026 Patrick Wozniak · <a href="https://patwoz.dev" target="_blank" rel="noopener noreferrer">patwoz.dev</a></div>
