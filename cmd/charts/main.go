@@ -76,11 +76,12 @@ func run(args args) error {
 		}
 	}
 
+	filePrefix := chartFilePrefix(args.City)
 	for _, chart := range charts {
 		svg := makeChart(chart.Rows, chart.Scope, args)
-		base := "nuernberg_overall_summary"
+		base := filePrefix + "_overall_summary"
 		if chart.Scope != "overall" {
-			base = "nuernberg_" + chart.Scope + "_summary"
+			base = filePrefix + "_" + chart.Scope + "_summary"
 		}
 		svgFile := filepath.Join(args.OutDir, base+".svg")
 		if err := os.WriteFile(svgFile, []byte(svg), 0o644); err != nil {
@@ -131,6 +132,10 @@ func parseArgs(argv []string) (args, error) {
 		if consume {
 			i++
 		}
+	}
+	out.City = strings.TrimSpace(out.City)
+	if out.City == "" {
+		return out, fmt.Errorf("--city must not be empty")
 	}
 	return out, nil
 }
@@ -321,18 +326,22 @@ func writeMostRemovedList(rows []mapsreview.Place, args args) error {
 		}
 		return ranked[i].Name < ranked[j].Name
 	})
-	if err := writeMostRemovedCSV(filepath.Join(args.OutDir, "nuernberg_most_removed.csv"), ranked); err != nil {
+	filePrefix := chartFilePrefix(args.City)
+	csvFile := filepath.Join(args.OutDir, filePrefix+"_most_removed.csv")
+	mdFile := filepath.Join(args.OutDir, filePrefix+"_most_removed.md")
+	htmlFile := filepath.Join(args.OutDir, filePrefix+"_most_removed.html")
+	if err := writeMostRemovedCSV(csvFile, ranked); err != nil {
 		return err
 	}
-	if err := writeMostRemovedMD(filepath.Join(args.OutDir, "nuernberg_most_removed.md"), ranked, args); err != nil {
+	if err := writeMostRemovedMD(mdFile, ranked, args); err != nil {
 		return err
 	}
-	if err := writeMostRemovedHTML(filepath.Join(args.OutDir, "nuernberg_most_removed.html"), ranked, rows, args); err != nil {
+	if err := writeMostRemovedHTML(htmlFile, ranked, rows, args); err != nil {
 		return err
 	}
-	fmt.Printf("wrote %s\n", filepath.Join(args.OutDir, "nuernberg_most_removed.csv"))
-	fmt.Printf("wrote %s\n", filepath.Join(args.OutDir, "nuernberg_most_removed.md"))
-	fmt.Printf("wrote %s\n", filepath.Join(args.OutDir, "nuernberg_most_removed.html"))
+	fmt.Printf("wrote %s\n", csvFile)
+	fmt.Printf("wrote %s\n", mdFile)
+	fmt.Printf("wrote %s\n", htmlFile)
 	return nil
 }
 
@@ -360,7 +369,7 @@ func writeMostRemovedCSV(file string, rows []mapsreview.Place) error {
 
 func writeMostRemovedMD(file string, rows []mapsreview.Place, args args) error {
 	lines := []string{
-		fmt.Sprintf("# %s — Orte sortiert nach geschätzter Anzahl entfernter Bewertungen", args.City),
+		fmt.Sprintf("# %s — Orte sortiert nach geschätzter Anzahl entfernter Bewertungen", esc(args.City)),
 		"",
 		"Quelle: Google Maps, öffentlich sichtbare Diffamierungs-Banner. Snapshot: " + time.Now().Format("02.01.2006") + ".",
 		"",
@@ -387,9 +396,38 @@ func writeMostRemovedHTML(file string, ranked []mapsreview.Place, allRows []maps
 	}
 	htmlText := fmt.Sprintf(`<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>%s — meist entfernte Google-Maps-Bewertungen</title><style>
 :root{--red:#c9332c;--text:#202124;--muted:#687078;--line:#dce5eb;--bg:#eef6fa}*{box-sizing:border-box}body{margin:0;font-family:Georgia,serif;background:linear-gradient(180deg,#d9e8f2,#f7fbfd 48%%,#e1e7ec);color:var(--text)}main{width:min(1450px,calc(100vw - 40px));margin:42px auto 80px}h1{font-size:clamp(34px,5vw,64px);line-height:1;margin:0 0 12px;letter-spacing:-.04em}.lead{max-width:900px;color:var(--muted);font:18px/1.5 system-ui,sans-serif}.stats{display:flex;gap:12px;flex-wrap:wrap;margin:24px 0}.stat{background:#fff;border:1px solid var(--line);border-left:8px solid var(--red);padding:14px 18px}.stat strong{display:block;font:700 30px/1 system-ui,sans-serif}.table-wrap{overflow:auto;background:#fff;border:1px solid var(--line);box-shadow:0 14px 42px rgba(60,80,95,.16)}table{width:100%%;border-collapse:collapse;min-width:1100px}th,td{padding:12px 14px;border-bottom:1px solid #edf2f5;text-align:left;font:14px system-ui,sans-serif}th{position:sticky;top:0;background:#f8fbfd;font-weight:800}.num{text-align:right;font-variant-numeric:tabular-nums}a{color:var(--red);font-weight:800;text-decoration:none}a:hover{text-decoration:underline}small{display:block;color:var(--muted);margin-top:4px}</style></head><body><main><h1>%s — meist entfernte Google-Maps-Bewertungen</h1><p class="lead">Orte mit sichtbarem Google-Maps-Hinweis auf entfernte Bewertungen wegen Beschwerden wegen Diffamierung. Namen sind direkt zur jeweiligen Google-Maps-Seite verlinkt.</p><div class="stats"><div class="stat"><strong>%s</strong><span>Einträge mit Banner</span></div><div class="stat"><strong>%s</strong><span>erfasste Orte</span></div><div class="stat"><strong>%s%%</strong><span>mit sichtbarem Banner</span></div></div><section class="table-wrap"><table><thead><tr><th class="num">Rang</th><th>Name / Google Maps</th><th>PLZ</th><th class="num">Rating</th><th class="num">Rezensionen</th><th class="num">Gelöscht</th><th class="num">Schätzwert</th><th class="num">Löschquote</th><th class="num">Worst-Case</th></tr></thead><tbody>%s</tbody></table></section></main></body></html>`,
-		args.City, args.City,
+		esc(args.City), esc(args.City),
 		mapsreview.FormatGermanInt(len(ranked)), mapsreview.FormatGermanInt(len(mapsreview.ValidRows(allRows))), mapsreview.FormatGermanFloat(float64(len(ranked))/math.Max(float64(len(mapsreview.ValidRows(allRows))), 1)*100, 1), body.String())
 	return os.WriteFile(file, []byte(htmlText), 0o644)
+}
+
+func chartFilePrefix(city string) string {
+	if mapsreview.IsDefaultCity(city) {
+		return "nuernberg"
+	}
+	city = strings.ToLower(strings.TrimSpace(city))
+	city = strings.NewReplacer(
+		"ä", "ae", "ö", "oe", "ü", "ue", "ß", "ss",
+	).Replace(city)
+	var b strings.Builder
+	lastDash := false
+	for _, r := range city {
+		isASCIIAlnum := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if isASCIIAlnum {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash && b.Len() > 0 {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	prefix := strings.Trim(b.String(), "-")
+	if prefix == "" {
+		return "city"
+	}
+	return prefix
 }
 
 func exportPNG(svgFile, pngFile string) error {

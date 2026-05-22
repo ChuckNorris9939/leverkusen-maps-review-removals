@@ -94,9 +94,15 @@ func parseArgs(argv []string) (args, error) {
 		case "--output":
 			out.Output = value
 		case "--help", "-h":
-			fmt.Println(`Usage:
+			fmt.Printf(`Usage:
   go run ./cmd/dashboard
-  go run ./cmd/dashboard --input output/places.json --output output/charts/nuernberg_dashboard.html`)
+  go run ./cmd/dashboard --input output/places.json --output output/charts/nuernberg_dashboard.html
+
+Options:
+  --city <name>       Displayed city name. Default: %s.
+  --input <path>      Scrape results JSON. Default: %s.
+  --output <path>     Dashboard HTML path. Default: %s.
+`, mapsreview.DefaultCity, defaultInput, defaultOutput)
 			os.Exit(0)
 		default:
 			return out, fmt.Errorf("unknown argument: %s", argv[i])
@@ -104,6 +110,10 @@ func parseArgs(argv []string) (args, error) {
 		if consume {
 			i++
 		}
+	}
+	out.City = strings.TrimSpace(out.City)
+	if out.City == "" {
+		return out, fmt.Errorf("--city must not be empty")
 	}
 	return out, nil
 }
@@ -169,8 +179,14 @@ func makeClientRows(rows []mapsreview.Place) []clientRow {
 }
 
 func makeHTML(args args, data []clientRow) string {
+	city := esc(args.City)
 	postcodes := uniqueSorted(data, func(row clientRow) string { return row.Postcode })
-	bezirke := allBezirkLabels()
+	bezirke := []string{}
+	bezirkBoundaries := []mapsreview.BezirkBoundary{}
+	if mapsreview.IsDefaultCity(args.City) {
+		bezirke = allBezirkLabels()
+		bezirkBoundaries = mapsreview.BezirkBoundaries()
+	}
 	if len(bezirke) == 0 {
 		bezirke = uniqueSorted(data, func(row clientRow) string { return row.BezirkLabel })
 	}
@@ -180,7 +196,7 @@ func makeHTML(args args, data []clientRow) string {
 	})
 	jsonData, _ := json.Marshal(data)
 	jsonText := strings.ReplaceAll(string(jsonData), "<", "\\u003c")
-	jsonBezirke, _ := json.Marshal(mapsreview.BezirkBoundaries())
+	jsonBezirke, _ := json.Marshal(bezirkBoundaries)
 	bezirkText := strings.ReplaceAll(string(jsonBezirke), "<", "\\u003c")
 
 	postcodeOptions := ""
@@ -213,7 +229,7 @@ func makeHTML(args args, data []clientRow) string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>` + args.City + ` Google-Maps-Bewertungen Dashboard</title>
+  <title>` + city + ` Google-Maps-Bewertungen Dashboard</title>
 __ANALYTICS__
   <script>
     (function () {
@@ -483,13 +499,13 @@ __ANALYTICS__
     <div class="sitebar-inner">
       <div class="top-icons" aria-hidden="true"><span>●</span><span>☝</span><span>▰</span></div>
       <button class="theme-toggle" id="themeToggle" type="button" aria-label="Dunkles Design aktivieren" aria-pressed="false"><span class="theme-toggle-icon" aria-hidden="true">☾</span><span class="theme-toggle-text">Dunkel</span></button>
-      <div class="n-logo">` + args.City + `</div>
+      <div class="n-logo">` + city + `</div>
     </div>
   </div>
 
   <section class="hero" aria-label="Seitentitel">
     <div class="hero-inner">
-      <div class="hero-title">` + args.City + ` Google-Maps-Bewertungen</div>
+      <div class="hero-title">` + city + ` Google-Maps-Bewertungen</div>
       <div class="hero-subtitle">Interaktives Daten-Dashboard zu sichtbaren Hinweisen auf entfernte Bewertungen wegen Diffamierungsbeschwerden.</div>
     </div>
   </section>

@@ -105,6 +105,8 @@ type metadata struct {
 	DelayMax          int      `json:"delayMax"`
 	Output            string   `json:"output"`
 	CSV               string   `json:"csv"`
+	Discovery         string   `json:"discovery"`
+	Metadata          string   `json:"metadata"`
 	UserAgent         string   `json:"userAgent"`
 	Discovered        int      `json:"discovered"`
 	Rows              int      `json:"rows"`
@@ -134,6 +136,8 @@ func writeMetadata(args args, discoveries []mapsreview.Discovery, rows []mapsrev
 		DelayMax:          args.DelayMax,
 		Output:            args.Out,
 		CSV:               args.CSV,
+		Discovery:         args.Discovery,
+		Metadata:          args.Metadata,
 		UserAgent:         mapsreview.UserAgent,
 		Discovered:        len(discoveries),
 		Rows:              len(rows),
