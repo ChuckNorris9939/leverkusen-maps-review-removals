@@ -499,6 +499,30 @@ function renderDistribution(rows) {
   const max = Math.max(1, ...counts.map(item => item.count));
   document.getElementById('distribution').innerHTML = counts.map(item => '<div class="dist-row"><strong>' + esc(item.bin) + '</strong><div class="dist-track"><div class="dist-fill" style="width:' + (item.count / max * 100) + '%"></div></div><span>' + n(item.count) + '</span></div>').join('') || '<p>Keine Banner im Filter.</p>';
 }
+function renderRatioHistogram(rows) {
+  const root = document.getElementById('ratioHistogram');
+  if (!root) return;
+  const minReviews = 50;
+  const scoped = bannerRows(rows).filter(row => Number.isFinite(row.deletionRatioPct) && Number.isFinite(row.reviewCount) && row.reviewCount >= minReviews);
+  if (scoped.length === 0) {
+    root.innerHTML = '<p>Keine passenden Orte im Filter.</p>';
+    return;
+  }
+  const bins = [
+    { label: '< 1%', min: -Infinity, max: 1 },
+    { label: '1–2%', min: 1, max: 2 },
+    { label: '2–5%', min: 2, max: 5 },
+    { label: '5–10%', min: 5, max: 10 },
+    { label: '10–20%', min: 10, max: 20 },
+    { label: '> 20%', min: 20, max: Infinity }
+  ];
+  const counts = bins.map(bin => ({
+    label: bin.label,
+    count: scoped.filter(row => row.deletionRatioPct >= bin.min && row.deletionRatioPct < bin.max).length
+  }));
+  const max = Math.max(1, ...counts.map(item => item.count));
+  root.innerHTML = counts.map(item => '<div class="dist-row"><strong>' + esc(item.label) + '</strong><div class="dist-track"><div class="dist-fill" style="width:' + (item.count / max * 100) + '%"></div></div><span>' + n(item.count) + '</span></div>').join('') + '<p class="dist-note">' + n(scoped.length) + ' Orte in dieser Einordnung.</p>';
+}
 function renderBezirkSummary(rows) {
   const groups = new Map();
   for (const row of rows) {
@@ -536,6 +560,7 @@ function updatePanels(rows) {
   renderBars('barsWorst', 'worst', [...banners].filter(row => Number.isFinite(row.realRatingAdjusted)).sort((a,b) => a.realRatingAdjusted - b.realRatingAdjusted), row => 5 - row.realRatingAdjusted, row => rating(row.rating) + '★ → ' + rating(row.realRatingAdjusted, 2) + '★', 'orange', 4);
   renderBars('barsClean', 'clean', [...cleanRankingRows(rows)].sort((a,b) => b.rating - a.rating || b.reviewCount - a.reviewCount), row => row.rating, row => rating(row.rating) + '★ · ' + n(row.reviewCount) + ' Rezensionen', 'green', 5);
   renderDistribution(rows);
+  renderRatioHistogram(rows);
 }
 function renderTable(rows) {
   const scoped = modeRows(rows);

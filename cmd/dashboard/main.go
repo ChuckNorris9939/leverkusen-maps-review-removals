@@ -495,6 +495,8 @@ __ANALYTICS__
     .fill.orange { background: var(--orange); }
     .fill.green { background: var(--green); }
     .dist { padding: 18px; margin-top: 18px; }
+    .dist-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 22px; }
+    .dist-panel p { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.45; }
     .dist-row { display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 12px; align-items: center; margin: 8px 0; font-size: 13px; }
     .bezirk-summary { padding: 18px; margin-top: 18px; }
     .bezirk-summary h2 { margin: 0 0 8px; color: var(--heading); font-size: 22px; font-weight: 700; }
@@ -506,6 +508,7 @@ __ANALYTICS__
     .bezirk-row span { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
     .dist-track { height: 12px; background: var(--track-bg); overflow: hidden; }
     .dist-fill { height: 100%; background: var(--red); }
+    .dist-note { margin-top: 10px !important; color: var(--muted); font-size: 12px !important; }
     .map-panel { margin-top: 18px; padding: 18px; }
     .map-panel h2 { margin: 0 0 8px; color: var(--heading); font-size: 22px; font-weight: 700; }
     .map-panel p { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
@@ -565,7 +568,7 @@ __ANALYTICS__
       .theme-toggle { width: 42px; padding: 0; justify-content: center; }
       .theme-toggle-text { display: none; }
       .n-logo { width: 128px; font-size: 18px; padding-left: 10px; padding-right: 10px; }
-      .kpis, .panel-grid, .seo-facts { grid-template-columns: 1fr; }
+      .kpis, .panel-grid, .seo-facts, .dist-grid { grid-template-columns: 1fr; }
       .controls { position: sticky; top: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 10px; padding: 10px; margin-bottom: 14px; }
       .filter-toggle { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 42px; padding: 8px 12px; border: 0; border-radius: 5px; background: var(--control-bg); color: var(--control-text); text-align: left; cursor: pointer; }
       .filter-toggle strong { display: block; font-size: 15px; line-height: 1.1; }
@@ -640,7 +643,12 @@ __SEO_SUMMARY__
       <article class="card panel"><h2>Beste Orte ohne Löschbanner</h2><p>Ohne sichtbaren Diffamierungs-Löschbanner, Rating zuerst — ab 100 Rezensionen.</p><div class="bars" id="barsClean"></div></article>
     </section>
 
-    <section class="card dist" aria-label="Verteilung"><h2>Verteilung der Lösch-Stufen</h2><div id="distribution"></div></section>
+    <section class="card dist" aria-label="Verteilungen">
+      <div class="dist-grid">
+        <div class="dist-panel"><h2>Verteilung der Lösch-Stufen</h2><div id="distribution"></div></div>
+        <div class="dist-panel"><h2>Einordnung der Löschquote</h2><p>Nur Orte mit sichtbarem Banner und mindestens 50 sichtbaren Rezensionen im aktuellen Filter.</p><div id="ratioHistogram"></div></div>
+      </div>
+    </section>
 
     <section class="card bezirk-summary" aria-label="Bezirks-Gruppen"><h2>Gruppierung nach statistischem Bezirk</h2><p>Top-Bezirke im aktuellen Filter, sortiert nach Banner-Anteil. Anklicken setzt den Bezirksfilter.</p><div class="bezirk-list" id="bezirkSummary"></div></section>
 

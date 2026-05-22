@@ -46,6 +46,8 @@ func TestMakeHTMLIncludesSEOMetadataAndSummary(t *testing.T) {
 		`Eigene Bewertung entfernt?`,
 		`Google-Einspruch`,
 		`Dashboard basiert auf der MIT-lizenzierten Vorlage von Patrick Wozniak.`,
+		`Einordnung der Löschquote`,
+		`ratioHistogram`,
 		`Top-Orte nach geschätzten entfernten Bewertungen`,
 		`Café &lt;Test&gt;`,
 	}
