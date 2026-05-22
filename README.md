@@ -130,7 +130,24 @@ Nützliche Optionen:
 --discovery output/discovery.json --metadata output/metadata.json
 ```
 
-Für andere Städte kann `--city` den Suchort und die Darstellung anpassen. Dann muss die PLZ-Liste explizit per `--postcodes` übergeben werden, damit nicht versehentlich die Nürnberger Standard-PLZ genutzt werden. Die statistischen Bezirke und Kartenflächen sind Nürnberg-spezifisch; bei anderen Städten zeigt das Dashboard keine Nürnberger Bezirksflächen. Diagrammdateien nutzen für andere Städte einen City-Slug als Präfix, z. B. `fuerth_overall_summary.svg`.
+### Andere Städte mit `--city`
+
+`--city` ist für Scrape, Diagramme und Dashboard verfügbar. Es setzt den Ortsnamen für die Google-Maps-Suche, die Dashboard-Texte/SEO-Metadaten und die Diagramm-Dateipräfixe.
+
+Wichtig: Für jede Nicht-Nürnberg-Stadt muss `--postcodes` explizit als CSV übergeben werden; `--postcodes all` ist dort absichtlich ungültig, damit nicht versehentlich die Nürnberger Standard-PLZ genutzt werden.
+
+```bash
+# Beispiel: Fürth-Orte suchen und scrapen
+make scrape ARGS="--city Fürth --postcodes 90762,90763 --queries restaurant,café --headless=false"
+
+# Diagramme mit City-Slug als Dateipräfix erzeugen, z. B. fuerth_overall_summary.svg
+make charts ARGS="--city Fürth --png"
+
+# Dashboard-Texte und Metadaten auf Fürth setzen
+go run ./cmd/dashboard --city Fürth --output output/charts/fuerth_dashboard.html
+```
+
+Einschränkungen: Die statistischen Bezirke und Kartenflächen sind Nürnberg-spezifisch. Bei anderen Städten zeigt das Dashboard keine Nürnberger Bezirksflächen; `go run ./cmd/validate --strict-nuremberg` ist dann nicht passend. `make site` und `make deploy-pages` sind aktuell auf die Nürnberg-Publication (`nuernberg-maps-review-removals.patwoz.dev`, `nuernberg_dashboard.html`) zugeschnitten; für eigene Stadt-Domains Makefile/Sitemap/Output-Pfade vorher anpassen oder die Artefakte manuell veröffentlichen.
 
 Optional kann der Scraper über CDP gegen einen bereits laufenden Browser wie Lightpanda laufen. Das ist experimentell; Chrome bleibt der Standard und war in Stichproben schneller:
 
