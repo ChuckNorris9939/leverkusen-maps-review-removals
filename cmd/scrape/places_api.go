@@ -4,12 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -22,12 +20,12 @@ const (
 )
 
 func discoverPlacesAPI(ctx context.Context, args args, dash *mapsreview.Dashboard) ([]mapsreview.Discovery, error) {
-	if err := loadDotEnv(".env"); err != nil {
+	apiKey, err := placesAPIKeyFromConfig(args.Config)
+	if err != nil {
 		return nil, err
 	}
-	apiKey := strings.TrimSpace(os.Getenv("GOOGLE_MAPS_API_KEY"))
 	if apiKey == "" {
-		return nil, errors.New("GOOGLE_MAPS_API_KEY is required in the environment or .env for --places-api-discovery")
+		return nil, fmt.Errorf("[places_api].api_key is required in %s for --places-api-discovery", args.Config)
 	}
 
 	existing, err := mapsreview.ReadJSON(args.Discovery, []mapsreview.Discovery{})

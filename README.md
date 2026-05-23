@@ -21,7 +21,7 @@ Voraussetzungen:
 - Go 1.25+
 - Chrome oder Chromium im `PATH` oder an einem Standard-Installationsort
 - Optional als experimentelles CDP-Backend: Lightpanda
-- Optional für Places-API-Discovery: Google Places API (New)-API-Key in `.env` (siehe `.env.example`)
+- Optional für Places-API-Discovery: Google Places API (New)-API-Key in `config.toml`
 - Optional für PNG-Export: ImageMagick `magick` oder `convert`
 
 ```bash
@@ -30,14 +30,7 @@ make setup
 go mod download
 ```
 
-Für die optionale Places-API-Discovery:
-
-```bash
-cp .env.example .env
-# GOOGLE_MAPS_API_KEY in .env setzen
-```
-
-`.env` wird nur beim Lauf mit `--places-api-discovery` gelesen und bleibt lokal/git-ignoriert.
+Für die optionale Places-API-Discovery `config.toml` aus `.config.toml.example` anlegen und `[places_api].api_key` setzen. `config.toml` bleibt lokal/git-ignoriert.
 
 ## 1) Daten sammeln
 
@@ -117,7 +110,7 @@ Nützliche Optionen:
 --postcodes 90402,90403
 --queries restaurant,café,imbiss,pizzeria,bäckerei
 --discovery-only
---places-api-discovery --discovery-only   # experimentell: offizielle Places API Text Search, ID-only/no-cost-SKU laut Google-Preisliste; liest GOOGLE_MAPS_API_KEY aus Umgebung oder .env
+--places-api-discovery --discovery-only   # experimentell: offizielle Places API Text Search, ID-only/no-cost-SKU laut Google-Preisliste; liest [places_api].api_key aus config.toml
 --places-api-pages 1                       # API-Seiten pro PLZ/Suche; Default 1 hält die Standardsuchen unter 1.000 Requests/Tag
 --scrape-only
 --scrape-only --rescrape-all   # alle gefundenen Orte erneut lesen, auch bereits erfolgreiche
@@ -147,7 +140,7 @@ make charts ARGS="--city Fürth --png"
 go run ./cmd/dashboard --city Fürth --output output/charts/fuerth_dashboard.html
 ```
 
-Einschränkungen: Die statistischen Bezirke und Kartenflächen sind Nürnberg-spezifisch. Bei anderen Städten zeigt das Dashboard keine Nürnberger Bezirksflächen; `go run ./cmd/validate --strict-nuremberg` ist dann nicht passend. `make site` und `make deploy-pages` sind aktuell auf die Nürnberg-Publication (`nuernberg-maps-review-removals.patwoz.dev`, `nuernberg_dashboard.html`) zugeschnitten; für eigene Stadt-Domains Makefile/Sitemap/Output-Pfade vorher anpassen oder die Artefakte manuell veröffentlichen.
+Einschränkungen: Die statistischen Bezirke und Kartenflächen sind Nürnberg-spezifisch. Bei anderen Städten zeigt das Dashboard keine Nürnberger Bezirksflächen; `go run ./cmd/validate --strict-nuremberg` ist dann nicht passend. Für eigene Stadt-Domains `city`, `output`, `site_domain`, `site_url` und `site_output` in `config.toml` anpassen.
 
 Optional kann der Scraper über CDP gegen einen bereits laufenden Browser wie Lightpanda laufen. Das ist experimentell; Chrome bleibt der Standard und war in Stichproben schneller:
 
@@ -188,6 +181,58 @@ make charts ARGS="--png"
 make dashboard
 ```
 
+### Dashboard-Konfiguration
+
+Optional kann `cmd/dashboard` eine lokale TOML-Konfiguration laden. Wenn `config.toml` im Projektroot existiert, wird sie automatisch verwendet; alternativ kann ein Pfad explizit übergeben werden:
+
+```bash
+cp .config.toml.example config.toml
+$EDITOR config.toml
+
+go run ./cmd/dashboard --config config.toml
+# oder implizit, wenn config.toml existiert:
+go run ./cmd/dashboard
+```
+
+`config.toml` ist git-ignoriert, weil darin rechtliche Kontakt-/Adressdaten stehen können. CLI-Flags überschreiben Werte aus der Konfiguration.
+
+Beispiel:
+
+```toml
+city = "Nürnberg"
+input = "output/places.json"
+output = "output/charts/nuernberg_dashboard.html"
+site_domain = "nuernberg-maps-review-removals.patwoz.dev"
+site_url = "https://nuernberg-maps-review-removals.patwoz.dev"
+site_output = "public"
+
+[legal]
+enabled = true
+name = "Patrick Wozniak"
+email = "hi@example.com"
+address_lines = [
+  "c/o Example GmbH",
+  "Example Street 1",
+  "90443 Nürnberg",
+  "Deutschland",
+]
+note = "Example GmbH ist nicht Betreiberin dieses Angebots. Sie dient ausschließlich als Zustellanschrift."
+post_handler = "Example GmbH"
+
+[analytics]
+# Optional: Plausible Analytics. Abschnitt entfernen, um Analytics zu deaktivieren.
+src = "https://a.patwoz.dev/js/script.js"
+domain = "nuernberg-maps-review-removals.patwoz.dev"
+
+[places_api]
+# Optional. Nur für --places-api-discovery erforderlich.
+api_key = ""
+```
+
+Wenn `[legal]` fehlt oder `enabled = false` gesetzt ist, erzeugt das Dashboard keine `methodik.html`, `korrektur.html`, `impressum.html` und `datenschutz.html` und verlinkt diese Seiten nicht. Sobald Legal-Seiten aktiviert sind, müssen `name`, `email` und `address_lines` gesetzt sein.
+
+Rechtlicher Hinweis: Die erzeugten Impressum-/Datenschutz-/Methodik-Texte sind technische Vorlagen und keine Rechtsberatung. Prüfe vor Veröffentlichung, ob Verantwortlicher, ladungsfähige Anschrift, E-Mail, Zustellanschrift, Hosting, Analytics, Kartenanbieter und sonstige Dienste für dein konkretes Setup korrekt und vollständig beschrieben sind. Eine c/o- oder Zustellanschrift sollte nur verwendet werden, wenn dort rechtliche Post zuverlässig entgegengenommen und an dich weitergeleitet wird.
+
 Ausgaben:
 
 - `output/charts/nuernberg_dashboard.html` — interaktive App mit KPIs, Filtern, Karte, sortierbarer Explorer-Tabelle und Google-Maps-Links
@@ -199,7 +244,7 @@ Ausgaben:
 
 Wenn ImageMagick nicht installiert ist, überspringt `--png` die PNG-Dateien und schreibt weiterhin SVGs.
 
-Die erzeugten Diagramm- und Dashboard-Dateien unter `output/charts/` werden von git ignoriert. Im Repository bleiben nur die Scrape-Snapshots (`output/places.json`, `output/places.csv`, `output/metadata.json`, optional `output/discovery.json`) versioniert; `make site` baut daraus `public/` für GitHub Pages neu.
+Die erzeugten Diagramm- und Dashboard-Dateien unter `output/charts/` werden von git ignoriert. Im Repository bleiben nur die Scrape-Snapshots (`output/places.json`, `output/places.csv`, `output/metadata.json`, optional `output/discovery.json`) versioniert; `make site` ruft `cmd/dashboard --site` auf und baut daraus `public/` für GitHub Pages. `site_domain`, `site_url` und `site_output` kommen dabei ausschließlich aus `config.toml`.
 
 Die Dashboard-Karte nutzt Leaflet mit CARTO-Kartenkacheln auf Basis von OpenStreetMap-Daten. Beim Öffnen der HTML-Datei ist deshalb Internetzugriff für Kartenkacheln nötig. Das Dashboard gruppiert, filtert und überlagert Einträge außerdem nach Nürnberger statistischem Bezirk (`Bezirk`).
 
@@ -216,13 +261,9 @@ make site
 python3 -m http.server --directory public 8080
 ```
 
-Optionale Plausible-Analytics werden nur eingebunden, wenn die Umgebungsvariable gesetzt ist:
+Optionale Plausible-Analytics werden eingebunden, wenn sie in `config.toml` unter `[analytics]` stehen.
 
-```bash
-DASHBOARD_ANALYTICS_SRC="https://a.patwoz.dev/js/script.js" \
-DASHBOARD_ANALYTICS_DOMAIN="nuernberg-maps-review-removals.patwoz.dev" \
-make site
-```
+Für GitHub Actions muss der Inhalt der lokalen `config.toml` als Repository-Secret `DASHBOARD_CONFIG_TOML` hinterlegt werden. Der Workflow schreibt daraus zur Laufzeit eine temporäre `config.toml`; der Inhalt wird nicht ins Repository oder nach `gh-pages` kopiert. Alternativ funktioniert auch eine Repository-Variable gleichen Namens, falls die Daten nicht geheim sind.
 
 Veröffentlichen:
 

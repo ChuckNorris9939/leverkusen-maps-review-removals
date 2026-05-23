@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,16 +20,50 @@ import (
 var dashboardJS string
 
 const (
-	defaultInput  = mapsreview.ResultsJSON
-	defaultOutput = "output/charts/nuernberg_dashboard.html"
-
-	siteURL = "https://nuernberg-maps-review-removals.patwoz.dev/"
+	defaultInput      = mapsreview.ResultsJSON
+	defaultOutput     = "output/charts/nuernberg_dashboard.html"
+	defaultConfigPath = "config.toml"
 )
 
 type args struct {
-	City   string
-	Input  string
-	Output string
+	City              string
+	Input             string
+	Output            string
+	LegalName         string
+	LegalEmail        string
+	LegalAddressLines []string
+	LegalNote         string
+	LegalPostHandler  string
+	AnalyticsSrc      string
+	AnalyticsDomain   string
+	SiteDomain        string
+	SiteURL           string
+	SiteOutput        string
+	BuildSite         bool
+}
+
+type dashboardConfig struct {
+	City       string
+	Input      string
+	Output     string
+	SiteDomain string
+	SiteURL    string
+	SiteOutput string
+	Legal      struct {
+		Enabled      *bool
+		Name         string
+		Email        string
+		AddressLines []string
+		Note         string
+		PostHandler  string
+	}
+	Analytics struct {
+		Src    string
+		Domain string
+	}
+	PlacesAPI struct {
+		APIKey string
+	}
 }
 
 type clientRow struct {
@@ -76,14 +111,15 @@ type dashboardMetadata struct {
 	SocialImageAlt  string
 }
 
-func dashboardMeta(city string) dashboardMetadata {
+func dashboardMeta(args args, city string) dashboardMetadata {
+	siteURL := normalizedSiteURL(args.SiteURL)
 	return dashboardMetadata{
 		SiteName:        fmt.Sprintf("%s Maps Review Removals", city),
-		PageTitle:       fmt.Sprintf("%s Google-Maps-Bewertungen: Löschbanner-Dashboard", city),
-		PageDescription: fmt.Sprintf("Interaktives %s-Dashboard zu sichtbaren Google-Maps-Hinweisen auf entfernte Bewertungen: Löschbanner, Löschquoten, Karte und Daten-Explorer.", city),
+		PageTitle:       fmt.Sprintf("%s Google-Maps-Bewertungen: Dashboard zu Google-Hinweisen", city),
+		PageDescription: fmt.Sprintf("Interaktives %s-Dashboard zu öffentlich sichtbaren Google-Maps-Hinweisen auf entfernte Bewertungen: Spannen, Näherungswerte, Karte und Daten-Explorer.", city),
 		CanonicalURL:    siteURL,
 		SocialImageURL:  siteURL + "charts/" + dashboardChartFilePrefix(city) + "_overall_summary.png",
-		SocialImageAlt:  fmt.Sprintf("Diagramm zur Auswertung entfernter Google-Maps-Bewertungen in %s", city),
+		SocialImageAlt:  fmt.Sprintf("Diagramm zur Auswertung sichtbarer Google-Maps-Hinweise in %s", city),
 	}
 }
 
@@ -140,30 +176,92 @@ func run(args args) error {
 	if err := os.WriteFile(args.Output, []byte(makeHTML(args, data)), 0o644); err != nil {
 		return err
 	}
+	if err := syncLegalPages(args, filepath.Dir(args.Output)); err != nil {
+		return err
+	}
+	if args.BuildSite {
+		if err := buildSite(args); err != nil {
+			return err
+		}
+	}
 	fmt.Printf("wrote %s\n", args.Output)
 	return nil
 }
 
 func parseArgs(argv []string) (args, error) {
-	out := args{City: mapsreview.DefaultCity, Input: defaultInput, Output: defaultOutput}
+	out := defaultArgs()
+	configPath, err := findConfigPath(argv)
+	if err != nil {
+		return out, err
+	}
+	if configPath != "" {
+		out, err = readDashboardConfig(configPath, out)
+		if err != nil {
+			return out, err
+		}
+	}
+
+	cliLegalAddressSeen := false
 	for i := 0; i < len(argv); i++ {
 		key, value, consume := splitArg(argv, i)
 		switch key {
+		case "--config":
+			// Loaded before CLI flags so explicit flags can override config values.
 		case "--city":
 			out.City = value
 		case "--input":
 			out.Input = value
 		case "--output":
 			out.Output = value
+		case "--legal-name":
+			out.LegalName = value
+		case "--legal-email":
+			out.LegalEmail = value
+		case "--legal-address-line":
+			if !cliLegalAddressSeen {
+				out.LegalAddressLines = nil
+				cliLegalAddressSeen = true
+			}
+			out.LegalAddressLines = append(out.LegalAddressLines, value)
+		case "--legal-note":
+			out.LegalNote = value
+		case "--legal-post-handler":
+			out.LegalPostHandler = value
+		case "--analytics-src":
+			out.AnalyticsSrc = value
+		case "--analytics-domain":
+			out.AnalyticsDomain = value
+		case "--site":
+			out.BuildSite = true
+			consume = false
+		case "--site-output":
+			out.SiteOutput = value
+		case "--site-domain":
+			out.SiteDomain = value
+		case "--site-url":
+			out.SiteURL = value
 		case "--help", "-h":
 			fmt.Printf(`Usage:
   go run ./cmd/dashboard
+  go run ./cmd/dashboard --config config.toml
   go run ./cmd/dashboard --input output/places.json --output output/charts/nuernberg_dashboard.html
 
 Options:
-  --city <name>       Displayed city name. Default: %s.
-  --input <path>      Scrape results JSON. Default: %s.
-  --output <path>     Dashboard HTML path. Default: %s.
+  --config <path>                       TOML config file. Defaults to config.toml when present. CLI flags override config values.
+  --city <name>                         Displayed city name. Default: %s.
+  --input <path>                        Scrape results JSON. Default: %s.
+  --output <path>                       Dashboard HTML path. Default: %s.
+  --legal-name <name>                   Generate legal pages with this responsible person.
+  --legal-email <email>                 Email address for legal pages.
+  --legal-address-line <line>           Address line for legal pages. Repeat for multiple lines.
+  --legal-note <text>                   Optional note, e.g. c/o address clarification.
+  --legal-post-handler <name>           Optional entity handling postal delivery.
+  --analytics-src <url>                 Optional Plausible script URL.
+  --analytics-domain <domain>           Optional Plausible data-domain.
+  --site                                Build public/ publishing artifact from generated dashboard outputs.
+  --site-output <path>                  Publishing artifact directory. Default from config.
+  --site-domain <domain>                Domain for CNAME, from config.toml.
+  --site-url <url>                      Public canonical URL, from config.toml.
 `, mapsreview.DefaultCity, defaultInput, defaultOutput)
 			os.Exit(0)
 		default:
@@ -177,7 +275,302 @@ Options:
 	if out.City == "" {
 		return out, fmt.Errorf("--city must not be empty")
 	}
+	if err := validateLegalArgs(out); err != nil {
+		return out, err
+	}
 	return out, nil
+}
+
+func defaultArgs() args {
+	return args{City: mapsreview.DefaultCity, Input: defaultInput, Output: defaultOutput, SiteOutput: "public"}
+}
+
+func findConfigPath(argv []string) (string, error) {
+	for i := 0; i < len(argv); i++ {
+		key, value, consume := splitArg(argv, i)
+		if key == "--config" {
+			if strings.TrimSpace(value) == "" {
+				return "", fmt.Errorf("--config requires a path")
+			}
+			return value, nil
+		}
+		if consume {
+			i++
+		}
+	}
+	if _, err := os.Stat(defaultConfigPath); err == nil {
+		return defaultConfigPath, nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	return "", nil
+}
+
+func readDashboardConfig(path string, base args) (args, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return base, err
+	}
+	cfg, err := parseDashboardTOML(string(data))
+	if err != nil {
+		return base, fmt.Errorf("read dashboard config %s: %w", path, err)
+	}
+	if strings.TrimSpace(cfg.City) != "" {
+		base.City = cfg.City
+	}
+	if strings.TrimSpace(cfg.Input) != "" {
+		base.Input = cfg.Input
+	}
+	if strings.TrimSpace(cfg.Output) != "" {
+		base.Output = cfg.Output
+	}
+	if strings.TrimSpace(cfg.SiteDomain) != "" {
+		base.SiteDomain = cfg.SiteDomain
+	}
+	if strings.TrimSpace(cfg.SiteURL) != "" {
+		base.SiteURL = cfg.SiteURL
+	}
+	if strings.TrimSpace(cfg.SiteOutput) != "" {
+		base.SiteOutput = cfg.SiteOutput
+	}
+	if cfg.Legal.Enabled != nil && !*cfg.Legal.Enabled {
+		base.LegalName = ""
+		base.LegalEmail = ""
+		base.LegalAddressLines = nil
+		base.LegalNote = ""
+		base.LegalPostHandler = ""
+	} else {
+		if strings.TrimSpace(cfg.Legal.Name) != "" {
+			base.LegalName = cfg.Legal.Name
+		}
+		if strings.TrimSpace(cfg.Legal.Email) != "" {
+			base.LegalEmail = cfg.Legal.Email
+		}
+		if len(cfg.Legal.AddressLines) > 0 {
+			base.LegalAddressLines = cfg.Legal.AddressLines
+		}
+		if strings.TrimSpace(cfg.Legal.Note) != "" {
+			base.LegalNote = cfg.Legal.Note
+		}
+		if strings.TrimSpace(cfg.Legal.PostHandler) != "" {
+			base.LegalPostHandler = cfg.Legal.PostHandler
+		}
+	}
+	if strings.TrimSpace(cfg.Analytics.Src) != "" {
+		base.AnalyticsSrc = cfg.Analytics.Src
+	}
+	if strings.TrimSpace(cfg.Analytics.Domain) != "" {
+		base.AnalyticsDomain = cfg.Analytics.Domain
+	}
+	return base, nil
+}
+
+func parseDashboardTOML(input string) (dashboardConfig, error) {
+	var cfg dashboardConfig
+	section := ""
+	lines := strings.Split(input, "\n")
+	for i := 0; i < len(lines); i++ {
+		line := strings.TrimSpace(stripTomlComment(lines[i]))
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			return cfg, fmt.Errorf("invalid TOML line %d", i+1)
+		}
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if strings.HasPrefix(value, "[") && !strings.Contains(value, "]") {
+			for i+1 < len(lines) {
+				i++
+				next := strings.TrimSpace(stripTomlComment(lines[i]))
+				value += " " + next
+				if strings.Contains(next, "]") {
+					break
+				}
+			}
+		}
+		if err := setDashboardConfigValue(&cfg, section, key, value); err != nil {
+			return cfg, fmt.Errorf("line %d: %w", i+1, err)
+		}
+	}
+	return cfg, nil
+}
+
+func stripTomlComment(line string) string {
+	inString := false
+	escaped := false
+	for i, r := range line {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' && inString {
+			escaped = true
+			continue
+		}
+		if r == '"' {
+			inString = !inString
+			continue
+		}
+		if r == '#' && !inString {
+			return line[:i]
+		}
+	}
+	return line
+}
+
+func setDashboardConfigValue(cfg *dashboardConfig, section string, key string, value string) error {
+	switch section {
+	case "":
+		s, err := parseTomlString(value)
+		if err != nil {
+			return err
+		}
+		switch key {
+		case "city":
+			cfg.City = s
+		case "input":
+			cfg.Input = s
+		case "output":
+			cfg.Output = s
+		case "site_domain":
+			cfg.SiteDomain = s
+		case "site_url":
+			cfg.SiteURL = s
+		case "site_output":
+			cfg.SiteOutput = s
+		default:
+			return fmt.Errorf("unknown config key %q", key)
+		}
+	case "legal":
+		switch key {
+		case "enabled":
+			v, err := strconv.ParseBool(value)
+			if err != nil {
+				return fmt.Errorf("invalid boolean for legal.enabled")
+			}
+			cfg.Legal.Enabled = &v
+		case "name":
+			v, err := parseTomlString(value)
+			if err != nil {
+				return err
+			}
+			cfg.Legal.Name = v
+		case "email":
+			v, err := parseTomlString(value)
+			if err != nil {
+				return err
+			}
+			cfg.Legal.Email = v
+		case "address_lines", "addressLines":
+			v, err := parseTomlStringArray(value)
+			if err != nil {
+				return err
+			}
+			cfg.Legal.AddressLines = v
+		case "note":
+			v, err := parseTomlString(value)
+			if err != nil {
+				return err
+			}
+			cfg.Legal.Note = v
+		case "post_handler", "postHandler":
+			v, err := parseTomlString(value)
+			if err != nil {
+				return err
+			}
+			cfg.Legal.PostHandler = v
+		default:
+			return fmt.Errorf("unknown legal config key %q", key)
+		}
+	case "analytics":
+		v, err := parseTomlString(value)
+		if err != nil {
+			return err
+		}
+		switch key {
+		case "src":
+			cfg.Analytics.Src = v
+		case "domain":
+			cfg.Analytics.Domain = v
+		default:
+			return fmt.Errorf("unknown analytics config key %q", key)
+		}
+	case "places_api", "placesAPI":
+		v, err := parseTomlString(value)
+		if err != nil {
+			return err
+		}
+		switch key {
+		case "api_key", "apiKey":
+			cfg.PlacesAPI.APIKey = v
+		default:
+			return fmt.Errorf("unknown places_api config key %q", key)
+		}
+	default:
+		return fmt.Errorf("unknown config section %q", section)
+	}
+	return nil
+}
+
+func parseTomlString(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(value, "\"") {
+		return "", fmt.Errorf("expected quoted string")
+	}
+	out, err := strconv.Unquote(value)
+	if err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+func parseTomlStringArray(value string) ([]string, error) {
+	value = strings.TrimSpace(value)
+	if !strings.HasPrefix(value, "[") || !strings.HasSuffix(value, "]") {
+		return nil, fmt.Errorf("expected string array")
+	}
+	value = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(value, "["), "]"))
+	if value == "" {
+		return nil, nil
+	}
+	parts := []string{}
+	start := -1
+	escaped := false
+	for i, r := range value {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' && start >= 0 {
+			escaped = true
+			continue
+		}
+		if r == '"' {
+			if start < 0 {
+				start = i
+			} else {
+				item, err := strconv.Unquote(value[start : i+1])
+				if err != nil {
+					return nil, err
+				}
+				parts = append(parts, item)
+				start = -1
+			}
+		}
+	}
+	if start >= 0 {
+		return nil, fmt.Errorf("unterminated string in array")
+	}
+	return parts, nil
 }
 
 func splitArg(argv []string, index int) (key string, value string, consume bool) {
@@ -263,7 +656,7 @@ func makeHTML(args args, data []clientRow) string {
 	snapshot := snapshotTime(data)
 	snapshotDisplay := snapshot.Format("02.01.2006")
 	stats := makeSEOStats(data, snapshotDisplay)
-	meta := dashboardMeta(city)
+	meta := dashboardMeta(args, city)
 	structuredData := structuredDataJSON(stats, snapshot, city, meta)
 
 	jsonText := compactClientDataJSON(data, city)
@@ -402,8 +795,13 @@ __ANALYTICS__
       --table-head-hover: #ececec;
       --row-hover: #fff4f2;
       --target-row: #fff0cc;
-      --pill-bg: #e8f2ea;
-      --pill-bad-bg: #fde6e2;
+      --pill-bg: #eef0f3;
+      --pill-bad-bg: #e2e8f1;
+      --marker-clean: #8a8e94;
+      --marker-mid: #5b7b8e;
+      --marker-high: #3c4e6b;
+      --pill-text: #555a62;
+      --pill-bad-text: #2f3e57;
       --map-bg: #f4f4f4;
       --hint-bg: rgba(51,51,51,.88);
       --focus-blue: rgba(31,111,139,.13);
@@ -442,8 +840,13 @@ __ANALYTICS__
         --table-head-hover: #2b2420;
         --row-hover: #2a1714;
         --target-row: #382b12;
-        --pill-bg: rgba(114,195,130,.16);
-        --pill-bad-bg: rgba(255,91,73,.16);
+        --pill-bg: rgba(180,188,200,.16);
+        --pill-bad-bg: rgba(120,148,184,.20);
+        --marker-clean: #9aa0a8;
+        --marker-mid: #7aa3ba;
+        --marker-high: #6a82af;
+        --pill-text: #b8bdc6;
+        --pill-bad-text: #b4cae4;
         --map-bg: #151210;
         --hint-bg: rgba(14,12,11,.92);
         --focus-blue: rgba(106,184,216,.22);
@@ -505,9 +908,12 @@ __ANALYTICS__
     .hero-inner { width: min(1320px, calc(100vw - 32px)); margin: 0 auto; padding: 120px 0 42px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 440px); gap: 22px; align-items: end; }
     .hero-title { width: min(760px, 100%); margin: 0; padding: 24px 28px; background: var(--hero-title-bg); color: #fff; font-size: clamp(32px, 4vw, 52px); line-height: 1.12; font-weight: 400; }
     .hero-subtitle { width: min(760px, 100%); margin-top: 14px; padding: 18px 22px; background: var(--surface-raised); border-radius: 5px; box-shadow: var(--shadow); color: var(--muted); font-size: 20px; line-height: 1.45; }
-    .appeal-box { padding: 18px; border: 1px solid var(--line); border-top: 5px solid var(--blue); background: var(--surface-raised); box-shadow: var(--shadow); color: var(--text); }
-    .appeal-box h2 { margin: 0 0 8px; color: var(--heading); font-size: 20px; line-height: 1.2; }
-    .appeal-box p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+    .context-note, .appeal-box { padding: 18px; border: 1px solid var(--line); border-top: 5px solid var(--blue); background: var(--surface-raised); box-shadow: var(--shadow); color: var(--text); }
+    .context-note strong, .appeal-box h2 { display: block; margin: 0 0 8px; color: var(--heading); font-size: 20px; line-height: 1.2; }
+    .context-note p, .appeal-box p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.45; }
+    .context-mobile, .appeal-short { display: none; }
+    .context-note nav { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; font-size: 13px; font-weight: 700; }
+    .appeal-box { margin-bottom: 14px; }
     .appeal-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
     .appeal-actions a { display: inline-flex; align-items: center; min-height: 34px; padding: 0 11px; border-radius: 4px; background: var(--control-bg); color: var(--control-text); font-size: 13px; font-weight: 700; text-decoration: none; }
     .appeal-actions a:hover, .appeal-actions a:focus-visible { background: var(--red); color: #fff; outline: none; }
@@ -586,6 +992,12 @@ __ANALYTICS__
     #placesMap.map-active::after { content: "Karten-Zoom aktiv"; }
     @media (pointer: coarse) { #placesMap.map-needs-key::after { content: "Zwei Finger zum Zoomen und Bewegen der Karte"; } }
     .map-empty { display: grid; place-items: center; height: 100%; padding: 20px; color: var(--muted); text-align: center; }
+    .map-consent { display: grid; place-items: center; height: 100%; padding: 24px; color: var(--muted); text-align: center; }
+    .map-consent-inner { max-width: 520px; }
+    .map-consent .map-consent-text { margin: 0 0 18px; color: var(--text); font-size: 14px; line-height: 1.5; }
+    .map-consent .map-consent-btn { display: inline-flex; align-items: center; min-height: 38px; padding: 0 16px; border: 0; border-radius: 4px; background: var(--red); color: #fff; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .map-consent .map-consent-btn:hover, .map-consent .map-consent-btn:focus-visible { background: var(--red-dark); outline: none; }
+    .map-consent .map-consent-link { margin: 22px 0 0; font-size: 12px; line-height: 1.5; }
     .map-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; color: var(--muted); font-size: 13px; }
     .legend-dot { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border-radius: 50%; vertical-align: -1px; }
     .legend-area { display: inline-block; width: 16px; height: 12px; margin-right: 6px; border: 2px solid var(--red); background: rgba(207,42,27,.12); vertical-align: -2px; }
@@ -620,8 +1032,8 @@ __ANALYTICS__
     .entry-address { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.35; }
     a { color: var(--red); text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .pill { display: inline-flex; align-items: center; border-radius: 3px; padding: 3px 7px; background: var(--pill-bg); color: var(--green); font-weight: 700; font-size: 12px; }
-    .pill.bad { background: var(--pill-bad-bg); color: var(--red); }
+    .pill { display: inline-flex; align-items: center; border-radius: 3px; padding: 3px 7px; background: var(--pill-bg); color: var(--pill-text); font-weight: 700; font-size: 12px; }
+    .pill.bad { background: var(--pill-bad-bg); color: var(--pill-bad-text); }
     .show-more { display: block; min-width: 220px; height: 42px; margin: 14px auto 0; padding: 0 18px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-raised); color: var(--heading); font-weight: 700; cursor: pointer; }
     .show-more:hover, .show-more:focus-visible { border-color: var(--red); color: var(--red); outline: none; }
     .show-more[hidden] { display: none; }
@@ -661,12 +1073,14 @@ __ANALYTICS__
       label { margin-bottom: 4px; font-size: 10px; letter-spacing: .04em; }
       input, select { height: 38px; padding: 0 9px; font-size: 15px; }
       .reset { height: 34px; padding: 0 10px; font-size: 13px; }
-      .hero { min-height: 300px; }
+      .hero { min-height: 300px; margin-bottom: 14px; }
       .hero-inner { padding-top: 92px; gap: 14px; }
       .hero-title { font-size: 32px; padding: 18px; }
-      .hero-subtitle { font-size: 16px; }
-      .appeal-box { padding: 16px; }
-      .appeal-box h2 { font-size: 19px; }
+      .hero-subtitle { display: none; }
+      .context-note, .appeal-box { padding: 16px; }
+      .context-note strong, .appeal-box h2 { font-size: 19px; }
+      .context-desktop, .appeal-full { display: none; }
+      .context-mobile, .appeal-short { display: inline; }
     }
   </style>
 </head>
@@ -683,25 +1097,32 @@ __ANALYTICS__
     <div class="hero-inner">
       <div class="hero-copy">
         <h1 class="hero-title">__CITY__ Google-Maps-Bewertungen</h1>
-        <div class="hero-subtitle">Interaktives Daten-Dashboard zu sichtbaren Hinweisen auf entfernte Bewertungen wegen Diffamierungsbeschwerden.</div>
+        <div class="hero-subtitle">Interaktives Daten-Dashboard zu öffentlich sichtbaren Google-Maps-Hinweisen auf entfernte Bewertungen wegen Diffamierungsbeschwerden.</div>
       </div>
-      <aside class="appeal-box" aria-label="Hilfe bei entfernter eigener Bewertung">
-        <h2>Eigene Bewertung entfernt?</h2>
-        <p>Wenn eine eigene Google-Maps-Bewertung aus deiner Sicht zu Unrecht entfernt wurde, kannst du bei Google Einspruch einlegen. Keine Erfolgsgarantie.</p>
-        <div class="appeal-actions"><a href="https://support.google.com/maps/answer/16673099?hl=de" target="_blank" rel="noopener noreferrer">Google-Einspruch</a></div>
-      </aside>
+      <section class="context-note" aria-label="Einordnung">
+        <strong>Einordnung</strong>
+        <p class="context-desktop">Diese Seite dokumentiert öffentlich sichtbare Google-Hinweise. Sie behauptet nicht, dass Betriebe rechtswidrig gehandelt, Bewertungen missbräuchlich entfernen ließen oder legitime Kritik unterdrückt wurde. Die Daten sind eine Momentaufnahme.</p>
+        <p class="context-mobile">Dokumentation öffentlich sichtbarer Google-Hinweise. Keine Aussage über Rechtswidrigkeit, Missbrauch oder unterdrückte Kritik. Momentaufnahme.</p>
+        __LEGAL_NAV__
+      </section>
     </div>
   </section>
 
   <main>
-    <section class="chips" aria-label="Quick-Filter"><button type="button" class="chip" data-chip="banner">🔴 Mit Löschbanner</button><button type="button" class="chip" data-chip="gastro">🍽️ Gastronomie</button><button type="button" class="chip" data-chip="nachtleben">🎉 Nachtleben</button><button type="button" class="chip" data-chip="beauty">💇 Beauty &amp; Wellness</button><button type="button" class="chip" data-chip="hotels">🏨 Beherbergung</button><button type="button" class="chip" data-chip="gesundheit">🏥 Gesundheit</button><button type="button" class="chip" data-chip="altstadt">🗺️ Altstadt</button></section>
+    <aside class="appeal-box" aria-label="Hilfe bei entfernter eigener Bewertung">
+      <h2>Eigene Bewertung entfernt?</h2>
+      <p><span class="appeal-full">Wenn eine eigene Google-Maps-Bewertung aus deiner Sicht zu Unrecht entfernt wurde, kannst du zuerst bei Google Einspruch einlegen. In der EU gibt es zusätzlich außergerichtliche Streitbeilegung nach dem Digital Services Act. Keine Erfolgsgarantie.</span><span class="appeal-short">Wenn deine eigene Bewertung aus deiner Sicht zu Unrecht entfernt wurde: erst Google-Einspruch, danach ggf. EU-Streitbeilegung. Keine Erfolgsgarantie.</span></p>
+      <div class="appeal-actions"><a href="https://support.google.com/maps/answer/16673099?hl=de" target="_blank" rel="noopener noreferrer">Google-Einspruch</a><a href="https://digital-strategy.ec.europa.eu/de/policies/dsa-out-court-dispute-settlement" target="_blank" rel="noopener noreferrer">EU-Streitbeilegung</a></div>
+    </aside>
+
+    <section class="chips" aria-label="Quick-Filter"><button type="button" class="chip" data-chip="banner">🔴 Mit Google-Hinweis</button><button type="button" class="chip" data-chip="gastro">🍽️ Gastronomie</button><button type="button" class="chip" data-chip="nachtleben">🎉 Nachtleben</button><button type="button" class="chip" data-chip="beauty">💇 Beauty &amp; Wellness</button><button type="button" class="chip" data-chip="hotels">🏨 Beherbergung</button><button type="button" class="chip" data-chip="gesundheit">🏥 Gesundheit</button><button type="button" class="chip" data-chip="altstadt">🗺️ Altstadt</button></section>
     <section class="controls is-collapsed" id="dashboardFilterControls" aria-label="Dashboard-Filter">
       <button class="filter-toggle" id="filterToggle" type="button" aria-expanded="false" aria-controls="dashboardFilterControls"><span><strong>Filter</strong><span class="filter-summary" id="filterSummary">Keine aktiven Filter</span></span><span class="filter-toggle-icon" aria-hidden="true">▾</span></button>
-      <div class="control search"><label for="searchInput">Suche</label><input id="searchInput" type="search" placeholder="Name, PLZ, Kategorie, Löschbereich …" autocomplete="off"></div>
+      <div class="control search"><label for="searchInput">Suche</label><input id="searchInput" type="search" placeholder="Name, PLZ, Kategorie, Hinweisbereich …" autocomplete="off"></div>
       <div class="control"><label for="postcodeFilter">PLZ</label><select id="postcodeFilter"><option value="">Alle PLZ</option>__POSTCODE_OPTIONS__</select></div>
       <div class="control"><label for="bezirkFilter">Bezirk</label><select id="bezirkFilter"><option value="">Alle Bezirke</option>__BEZIRK_OPTIONS__</select></div>
-      <div class="control"><label for="bannerFilter">Banner</label><select id="bannerFilter"><option value="all">Alle</option><option value="banner">Mit Banner</option><option value="clean">Ohne Banner</option></select></div>
-      <div class="control"><label for="rangeFilter">Gelöscht</label><select id="rangeFilter"><option value="">Alle Bereiche</option>__RANGE_OPTIONS__</select></div>
+      <div class="control"><label for="bannerFilter">Hinweis</label><select id="bannerFilter"><option value="all">Alle</option><option value="banner">Mit Hinweis</option><option value="clean">Ohne Hinweis</option></select></div>
+      <div class="control"><label for="rangeFilter">Spanne</label><select id="rangeFilter"><option value="">Alle Bereiche</option>__RANGE_OPTIONS__</select></div>
       <div class="control"><label for="categoryFilter">Kategorie</label><select id="categoryFilter"><option value="">Alle Kategorien</option>__CATEGORY_OPTIONS__</select></div>
       <div class="control"><label for="minReviews">Min. Rezensionen</label><input id="minReviews" type="number" min="0" step="1" value="0"></div>
       <button class="reset" id="resetFilters" type="button">Reset</button>
@@ -709,50 +1130,50 @@ __ANALYTICS__
 
     <section class="grid kpis" aria-label="Kennzahlen">
       <div class="card kpi"><span class="value" id="kpiPlaces">–</span><span class="label">Orte im Filter</span></div>
-      <div class="card kpi"><span class="value" id="kpiBanners">–</span><span class="label">mit sichtbarem Banner</span></div>
-      <div class="card kpi"><span class="value" id="kpiBannerPct">–</span><span class="label">Banner-Anteil</span></div>
-      <div class="card kpi"><span class="value" id="kpiRemoved">–</span><span class="label">geschätzt entfernt</span></div>
-      <div class="card kpi"><span class="value" id="kpiClean">–</span><span class="label">ohne sichtbaren Banner</span></div>
+      <div class="card kpi"><span class="value" id="kpiBanners">–</span><span class="label">mit sichtbarem Google-Hinweis</span></div>
+      <div class="card kpi"><span class="value" id="kpiBannerPct">–</span><span class="label">Anteil mit Hinweis</span></div>
+      <div class="card kpi"><span class="value" id="kpiRemoved">–</span><span class="label">Näherungswert aus Spannen</span></div>
+      <div class="card kpi"><span class="value" id="kpiClean">–</span><span class="label">ohne sichtbaren Hinweis</span></div>
     </section>
 
 __SEO_SUMMARY__
 
     <section class="grid panel-grid" aria-label="Top-Rankings">
-      <article class="card panel"><h2>Meiste entfernte Bewertungen</h2><p>Sortiert nach geschätztem Mittelpunkt.</p><div class="bars" id="barsRemoved"></div></article>
-      <article class="card panel"><h2>Höchste Lösch-Quote</h2><p>Entfernte / sichtbare + entfernte Bewertungen.</p><div class="bars" id="barsRatio"></div></article>
-      <article class="card panel"><h2>Schlechtestes Worst-Case-Rating</h2><p>Modell: alle entfernten Bewertungen waren 1★.</p><div class="bars" id="barsWorst"></div></article>
-      <article class="card panel"><h2>Beste Orte ohne Löschbanner</h2><p>Ohne sichtbaren Diffamierungs-Löschbanner, Rating zuerst — ab 100 Rezensionen.</p><div class="bars" id="barsClean"></div></article>
+      <article class="card panel"><h2>Höchste Hinweisspannen</h2><p>Sortiert nach dem Mittelpunkt der öffentlich angezeigten Google-Spanne.</p><div class="bars" id="barsRemoved"></div></article>
+      <article class="card panel"><h2>Geschätzter Hinweis-Anteil</h2><p>Pro Ort: entfernt / (sichtbar + entfernt). Näherungswert, nicht als exakte Quote interpretieren.</p><div class="bars" id="barsRatio"></div></article>
+      <article class="card panel"><h2>Hypothetisches Worst-Case-Rating</h2><p>Mathematische Untergrenze unter der Annahme, dass alle entfernten Bewertungen 1★ waren. Keine Aussage über Betriebsqualität.</p><div class="bars" id="barsWorst"></div></article>
+      <article class="card panel"><h2>Ohne sichtbaren Hinweis</h2><p>Im Abruf war kein passender Google-Hinweis sichtbar. Sortiert nach Rating ab 100 Rezensionen. Keine Qualitätsaussage gegenüber anderen Orten.</p><div class="bars" id="barsClean"></div></article>
     </section>
 
     <section class="card dist" aria-label="Verteilungen">
       <div class="dist-grid">
-        <div class="dist-panel"><h2>Verteilung der Lösch-Stufen</h2><div id="distribution"></div></div>
-        <div class="dist-panel"><h2>Einordnung der Löschquote</h2><p>Nur Orte mit sichtbarem Banner und mindestens 50 sichtbaren Rezensionen im aktuellen Filter.</p><div id="ratioHistogram"></div></div>
+        <div class="dist-panel"><h2>Verteilung der Spannen</h2><div id="distribution"></div></div>
+        <div class="dist-panel"><h2>Hinweis-Anteil im Vergleich</h2><p>Nur Orte mit sichtbarem Google-Hinweis und mindestens 50 sichtbaren Rezensionen im aktuellen Filter.</p><div id="ratioHistogram"></div></div>
       </div>
     </section>
 
-    <section class="card bezirk-summary" aria-label="Bezirks-Gruppen"><h2>Gruppierung nach statistischem Bezirk</h2><p>Top-Bezirke im aktuellen Filter, sortiert nach Banner-Anteil. Anklicken setzt den Bezirksfilter.</p><div class="bezirk-list" id="bezirkSummary"></div></section>
+    <section class="card bezirk-summary" aria-label="Bezirks-Gruppen"><h2>Gruppierung nach statistischem Bezirk</h2><p>Top-Bezirke im aktuellen Filter, sortiert nach Hinweis-Anteil. Anklicken setzt den Bezirksfilter.</p><div class="bezirk-list" id="bezirkSummary"></div></section>
 
-    <section class="card bezirk-summary" aria-label="Kategorie-Gruppen"><h2>Gruppierung nach Kategorie</h2><p>Übergeordnete Kategorie-Gruppen im aktuellen Filter, sortiert nach Banner-Anteil.</p><div class="bezirk-list" id="parentSummary"></div></section>
+    <section class="card bezirk-summary" aria-label="Kategorie-Gruppen"><h2>Gruppierung nach Kategorie</h2><p>Übergeordnete Kategorie-Gruppen im aktuellen Filter, sortiert nach Hinweis-Anteil.</p><div class="bezirk-list" id="parentSummary"></div></section>
 
     <section class="card map-panel" aria-label="Karte">
       <h2>Karte der erfassten Orte</h2>
       <p><span id="mapCount">–</span> Orte mit Koordinaten im aktuellen Filter. Marker anklicken markiert Einträge; Bezirksflächen anklicken setzt den Bezirkfilter.</p>
-      <div id="placesMap"><div class="map-empty">Karte wird geladen …</div></div>
-      <div class="map-legend"><span><i class="legend-area"></i>Bezirk, klickbar</span><span><i class="legend-dot" style="background:#1f6f8b"></i>dein Standort</span><span><i class="legend-dot" style="background:#c9332c"></i>hohe Lösch-Quote</span><span><i class="legend-dot" style="background:#ef7d16"></i>sichtbarer Banner</span><span><i class="legend-dot" style="background:#2d7b3f"></i>kein sichtbarer Banner</span></div>
+      <div id="placesMap">__MAP_CONSENT__</div>
+      <div class="map-legend"><span><i class="legend-area"></i>Bezirk, klickbar</span><span><i class="legend-dot" style="background:#1f6f8b"></i>dein Standort</span><span><i class="legend-dot" style="background:#3c4e6b"></i>hoher Hinweis-Anteil</span><span><i class="legend-dot" style="background:#5b7b8e"></i>sichtbarer Hinweis</span><span><i class="legend-dot" style="background:#8a8e94"></i>kein sichtbarer Hinweis</span></div>
     </section>
 
     <nav class="tabs" aria-label="Tabellen-Presets">
-      <button class="tab" data-mode="removed">Meiste entfernt</button>
-      <button class="tab active" data-mode="ratio">Höchste Lösch-Quote</button>
+      <button class="tab" data-mode="removed">Höchste Spannen</button>
+      <button class="tab active" data-mode="ratio">Hinweis-Anteil</button>
       <button class="tab" data-mode="worst">Worst-Case-Rating</button>
-      <button class="tab" data-mode="clean">Ohne Löschbanner</button>
+      <button class="tab" data-mode="clean">Ohne Hinweis</button>
       <button class="tab" data-mode="nearby">In meiner Nähe</button>
     </nav>
     <div class="sub-chips" id="subChips"></div>
     <div class="nearby-status" id="nearbyStatus" role="status" aria-live="polite" hidden></div>
 
-    <div class="table-head"><strong id="tableTitle">Höchste Lösch-Quote</strong><span id="resultCount">–</span></div>
+    <div class="table-head"><strong id="tableTitle">Hinweis-Anteil</strong><span id="resultCount">–</span></div>
     <section class="table-wrap" aria-label="Daten-Explorer">
       <table id="placesTable">
         <colgroup><col class="rank"><col class="name"><col class="bezirk"><col class="plz"><col class="rating"><col class="reviews"><col class="banner"><col class="removed"><col class="estimate"><col class="ratio"><col class="real"><col class="checked"><col class="category"></colgroup>
@@ -763,11 +1184,11 @@ __SEO_SUMMARY__
           <th><button data-sort="postcode">PLZ <span class="arrow"></span></button></th>
           <th class="num"><button data-sort="rating">Rating <span class="arrow"></span></button></th>
           <th class="num"><button data-sort="reviewCount">Rezensionen <span class="arrow"></span></button></th>
-          <th><button data-sort="hasBanner">Banner <span class="arrow"></span></button></th>
-          <th class="num"><button data-sort="removedEstimate">Gelöscht <span class="arrow"></span></button></th>
-          <th class="num"><button data-sort="removedEstimate">Schätzwert <span class="arrow"></span></button></th>
-          <th class="num"><button data-sort="deletionRatioPct">Löschquote <span class="arrow"></span></button></th>
-          <th class="num"><button data-sort="realRatingAdjusted">Worst-Case <span class="arrow"></span></button></th>
+          <th><button data-sort="hasBanner">Google-Hinweis <span class="arrow"></span></button></th>
+          <th class="num"><button data-sort="removedEstimate">Spanne <span class="arrow"></span></button></th>
+          <th class="num"><button data-sort="removedEstimate">Näherungswert <span class="arrow"></span></button></th>
+          <th class="num"><button data-sort="deletionRatioPct">Hinweis-Anteil <span class="arrow"></span></button></th>
+          <th class="num"><button data-sort="realRatingAdjusted" title="Hypothetische Modellrechnung: nimmt an, alle entfernten Bewertungen wären 1★ gewesen.">Worst-Case (hyp.) <span class="arrow"></span></button></th>
           <th><button data-sort="readAt">Geprüft <span class="arrow"></span></button></th>
           <th><button data-sort="category">Kategorie <span class="arrow"></span></button></th>
         </tr></thead>
@@ -778,7 +1199,7 @@ __SEO_SUMMARY__
 
     <section class="card related-dashboards" aria-label="Weitere regionale Dashboards">
       <h2>Weitere regionale Dashboards</h2>
-      <p>Öffentlich verfügbare Dashboards anderer Regionen zum gleichen Google-Maps-Löschbanner-Thema.</p>
+      <p>Öffentlich verfügbare Dashboards anderer Regionen zum gleichen Google-Maps-Hinweis-Thema.</p>
       <div class="related-grid">
         <a class="related-link" href="https://bewertungsradar-saar.de/" target="_blank" rel="noopener noreferrer"><strong>Saarland</strong><span>bewertungsradar-saar.de</span></a>
         <a class="related-link" href="https://nekronomekron.github.io/landshut-maps-review-removals/" target="_blank" rel="noopener noreferrer"><strong>Landshut</strong><span>nekronomekron.github.io</span></a>
@@ -789,9 +1210,10 @@ __SEO_SUMMARY__
     </section>
 
     <footer>
-      <div>Dashboard basiert auf der MIT-lizenzierten Vorlage von Patrick Wozniak.</div>
-      <div>Quelle: Google Maps, öffentlich sichtbare Banner. „Kein Banner“ heißt nur: im Scrape war kein passender Hinweis sichtbar. Snapshot: __SNAPSHOT__.</div>
+      <div>Journalistische Recherche-Momentaufnahme; keine Rezensionstexte und keine Rohdaten-CSV in dieser Veröffentlichung. Dashboard basiert auf der MIT-lizenzierten Vorlage von Patrick Wozniak.</div>
+      <div>Quelle: Google Maps, öffentlich sichtbare Hinweise. „Kein Hinweis“ heißt nur: im Abruf war kein passender Hinweis sichtbar. Datenabruf: __SNAPSHOT__.</div>
 __ANALYTICS_PRIVACY__
+      __FOOTER_LEGAL_LINKS__
       <div class="footer-credit">© 2026 Patrick Wozniak · <a href="https://patwoz.dev" target="_blank" rel="noopener noreferrer">patwoz.dev</a></div>
     </footer>
   </main>
@@ -815,14 +1237,17 @@ __DASHBOARD_JS__
 		"__MODIFIED_TIME__", snapshot.Format(time.RFC3339),
 		"__STRUCTURED_DATA__", structuredData,
 		"__CITY__", esc(city),
+		"__LEGAL_NAV__", legalNavHTML(args),
+		"__FOOTER_LEGAL_LINKS__", footerLegalLinksHTML(args),
+		"__MAP_CONSENT__", mapConsentHTML(args),
 		"__SEO_SUMMARY__", seoSummaryHTML(stats, city),
 		"__POSTCODE_OPTIONS__", postcodeOptions,
 		"__BEZIRK_OPTIONS__", bezirkOptions,
 		"__RANGE_OPTIONS__", rangeOptions,
 		"__CATEGORY_OPTIONS__", categoryOptions,
 		"__DASHBOARD_JS__", dashboardJS,
-		"__ANALYTICS__", plausibleAnalyticsSnippet(),
-		"__ANALYTICS_PRIVACY__", plausiblePrivacyNotice(),
+		"__ANALYTICS__", plausibleAnalyticsSnippet(args),
+		"__ANALYTICS_PRIVACY__", plausiblePrivacyNotice(args),
 		"__SNAPSHOT__", snapshotDisplay,
 		"__CONFIG__", configText,
 		"__DATA__", jsonText,
@@ -1058,15 +1483,15 @@ func makeSEOStats(data []clientRow, snapshot string) seoStats {
 
 func seoSummaryHTML(stats seoStats, city string) string {
 	return fmt.Sprintf(`<section class="card seo-summary" aria-labelledby="data-overview-title">
-      <h2 id="data-overview-title">Datenstand: Google-Maps-Bewertungen und Löschbanner in %s</h2>
-      <p>Dieses Dashboard macht öffentlich sichtbare Hinweise auf wegen Diffamierungsbeschwerden entfernte Google-Maps-Bewertungen in %s durchsuchbar. Die Karte, Filter und Ranglisten zeigen Löschbanner, geschätzte entfernte Bewertungen, Löschquoten und Worst-Case-Ratings je Ort.</p>
+      <h2 id="data-overview-title">Datenstand: Google-Maps-Bewertungen und Google-Hinweise in %s</h2>
+      <p>Dieses Dashboard macht öffentlich sichtbare Hinweise auf wegen Diffamierungsbeschwerden entfernte Google-Maps-Bewertungen in %s durchsuchbar. Die Karte, Filter und Ranglisten zeigen sichtbare Google-Hinweise, öffentlich angezeigte Spannen, Näherungswerte, Hinweis-Anteile und Worst-Case-Ratings je Ort.</p>
       <ul class="seo-facts">
         <li><strong>%s</strong> erfasste Orte</li>
-        <li><strong>%s</strong> mit sichtbarem Löschbanner</li>
-        <li><strong>%s</strong> geschätzt entfernte Bewertungen</li>
-        <li><strong>%s</strong> ohne sichtbaren Banner</li>
+        <li><strong>%s</strong> mit sichtbarem Google-Hinweis</li>
+        <li><strong>%s</strong> Näherungswert aus Spannen</li>
+        <li><strong>%s</strong> ohne sichtbaren Hinweis</li>
       </ul>
-      <p class="seo-meta">Datenstand: %s. Kein sichtbarer Banner bedeutet nur, dass beim Scrape kein passender Hinweis sichtbar war.</p>
+      <p class="seo-meta">Datenstand: %s. Kein sichtbarer Hinweis bedeutet nur, dass beim Abruf kein passender Hinweis sichtbar war.</p>
 %s
     </section>`,
 		esc(city),
@@ -1085,7 +1510,7 @@ func seoTopListHTML(rows []clientRow) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(`<div class="seo-top"><h3>Kurzüberblick: Orte mit den meisten Löschhinweisen</h3><ol>`)
+	b.WriteString(`<div class="seo-top"><h3>Kurzüberblick: Orte mit den höchsten Hinweisspannen</h3><ol>`)
 	for _, row := range rows {
 		label := esc(row.Name)
 		if row.URL != "" {
@@ -1093,7 +1518,7 @@ func seoTopListHTML(rows []clientRow) string {
 		}
 		meta := []string{}
 		if row.RemovedRange != "" {
-			meta = append(meta, "Bereich "+row.RemovedRange)
+			meta = append(meta, "Spanne "+row.RemovedRange)
 		}
 		if row.Postcode != "" {
 			meta = append(meta, "PLZ "+row.Postcode)
@@ -1105,7 +1530,7 @@ func seoTopListHTML(rows []clientRow) string {
 		if len(meta) > 0 {
 			detail = esc(strings.Join(meta, " · ")) + " · "
 		}
-		fmt.Fprintf(&b, `<li>%s <span class="seo-meta">%sSchätzwert ca. %s entfernte Bewertungen</span></li>`,
+		fmt.Fprintf(&b, `<li>%s <span class="seo-meta">%sNäherungswert ca. %s</span></li>`,
 			label,
 			detail,
 			mapsreview.FormatGermanInt(int(row.RemovedEstimate+0.5)),
@@ -1153,7 +1578,7 @@ func structuredDataJSON(stats seoStats, snapshot time.Time, city string, meta da
 			{
 				"@type":                "Dataset",
 				"@id":                  meta.CanonicalURL + "#dataset",
-				"name":                 fmt.Sprintf("%s Google-Maps-Bewertungen mit sichtbaren Löschbanner-Hinweisen", city),
+				"name":                 fmt.Sprintf("%s Google-Maps-Bewertungen mit sichtbaren Google-Hinweisen", city),
 				"description":          meta.PageDescription,
 				"url":                  meta.CanonicalURL,
 				"dateModified":         snapshot.Format("2006-01-02"),
@@ -1163,7 +1588,7 @@ func structuredDataJSON(stats seoStats, snapshot time.Time, city string, meta da
 					city,
 					"Google Maps Bewertungen",
 					"entfernte Bewertungen",
-					"Löschbanner",
+					"Google-Hinweise",
 					"Diffamierungsbeschwerden",
 				},
 				"spatialCoverage": map[string]interface{}{
@@ -1172,12 +1597,12 @@ func structuredDataJSON(stats seoStats, snapshot time.Time, city string, meta da
 				},
 				"variableMeasured": []string{
 					"Orte",
-					"sichtbare Löschbanner",
-					"geschätzte entfernte Bewertungen",
-					"Löschquote",
+					"sichtbare Google-Hinweise",
+					"Näherungswert aus Google-Spannen",
+					"Hinweis-Anteil",
 					"Worst-Case-Rating",
 				},
-				"size": fmt.Sprintf("%d Orte, %d sichtbare Löschbanner", stats.Total, stats.Banners),
+				"size": fmt.Sprintf("%d Orte, %d sichtbare Google-Hinweise", stats.Total, stats.Banners),
 				"creator": map[string]interface{}{
 					"@type": "Person",
 					"name":  "Patrick Wozniak",
@@ -1190,12 +1615,12 @@ func structuredDataJSON(stats seoStats, snapshot time.Time, city string, meta da
 	return strings.ReplaceAll(string(jsonData), "<", "\\u003c")
 }
 
-func plausibleAnalyticsSnippet() string {
-	src := plausibleAnalyticsSrc()
+func plausibleAnalyticsSnippet(args args) string {
+	src := plausibleAnalyticsSrc(args)
 	if src == "" {
 		return ""
 	}
-	domain := strings.TrimSpace(os.Getenv("DASHBOARD_ANALYTICS_DOMAIN"))
+	domain := plausibleAnalyticsDomain(args)
 	if domain != "" {
 		return fmt.Sprintf(`  <!-- Privacy-friendly analytics by Plausible -->
   <script defer data-domain="%s" src="%s"></script>`, escAttr(domain), escAttr(src))
@@ -1208,8 +1633,8 @@ func plausibleAnalyticsSnippet() string {
   </script>`, escAttr(src))
 }
 
-func plausiblePrivacyNotice() string {
-	src := plausibleAnalyticsSrc()
+func plausiblePrivacyNotice(args args) string {
+	src := plausibleAnalyticsSrc(args)
 	if src == "" {
 		return ""
 	}
@@ -1218,11 +1643,18 @@ func plausiblePrivacyNotice() string {
 	if host != "" {
 		hostText = fmt.Sprintf(` Anbieter-Domain: <code>%s</code>.`, esc(host))
 	}
-	return fmt.Sprintf(`<div class="footer-privacy">Diese Website nutzt Plausible Analytics, eine datenschutzfreundliche Webanalyse ohne Cookies. Die Auswertung erfolgt aggregiert und ohne personenbezogene Nutzerprofile.%s</div>`, hostText)
+	if legalPagesEnabled(args) {
+		return fmt.Sprintf(`<div class="footer-privacy">Diese Website nutzt Plausible Analytics, eine datenschutzfreundliche Webanalyse ohne Cookies. Details stehen in der <a href="datenschutz.html">Datenschutzerklärung</a>.%s</div>`, hostText)
+	}
+	return fmt.Sprintf(`<div class="footer-privacy">Diese Website nutzt Plausible Analytics, eine datenschutzfreundliche Webanalyse ohne Cookies.%s</div>`, hostText)
 }
 
-func plausibleAnalyticsSrc() string {
-	return strings.TrimSpace(os.Getenv("DASHBOARD_ANALYTICS_SRC"))
+func plausibleAnalyticsSrc(args args) string {
+	return strings.TrimSpace(args.AnalyticsSrc)
+}
+
+func plausibleAnalyticsDomain(args args) string {
+	return strings.TrimSpace(args.AnalyticsDomain)
 }
 
 func analyticsHost(src string) string {

@@ -25,30 +25,26 @@ func TestDiscoverySeenMatchesScrapedSearchResultAlias(t *testing.T) {
 	}
 }
 
-func TestLoadDotEnvSetsUnsetValues(t *testing.T) {
-	t.Setenv("GOOGLE_MAPS_API_KEY", "")
-	path := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(path, []byte("# comment\nGOOGLE_MAPS_API_KEY=test-key\n"), 0o600); err != nil {
+func TestPlacesAPIKeyFromConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[places_api]\napi_key = \"test-key\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := loadDotEnv(path); err != nil {
+	got, err := placesAPIKeyFromConfig(path)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := os.Getenv("GOOGLE_MAPS_API_KEY"); got != "test-key" {
-		t.Fatalf("GOOGLE_MAPS_API_KEY = %q, want test-key", got)
+	if got != "test-key" {
+		t.Fatalf("placesAPIKeyFromConfig = %q, want test-key", got)
 	}
 }
 
-func TestLoadDotEnvDoesNotOverrideExistingEnv(t *testing.T) {
-	t.Setenv("GOOGLE_MAPS_API_KEY", "from-env")
-	path := filepath.Join(t.TempDir(), ".env")
-	if err := os.WriteFile(path, []byte("GOOGLE_MAPS_API_KEY=from-file\n"), 0o600); err != nil {
+func TestPlacesAPIKeyFromConfigMissingFile(t *testing.T) {
+	got, err := placesAPIKeyFromConfig(filepath.Join(t.TempDir(), "missing.toml"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := loadDotEnv(path); err != nil {
-		t.Fatal(err)
-	}
-	if got := os.Getenv("GOOGLE_MAPS_API_KEY"); got != "from-env" {
-		t.Fatalf("GOOGLE_MAPS_API_KEY = %q, want from-env", got)
+	if got != "" {
+		t.Fatalf("placesAPIKeyFromConfig missing file = %q, want empty", got)
 	}
 }

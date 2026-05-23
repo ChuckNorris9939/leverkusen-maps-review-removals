@@ -40,6 +40,20 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Create local config.toml
+        env:
+          DASHBOARD_CONFIG_TOML_SECRET: ${{ secrets.DASHBOARD_CONFIG_TOML }}
+          DASHBOARD_CONFIG_TOML_VAR: ${{ vars.DASHBOARD_CONFIG_TOML }}
+        run: |
+          if [ -n "$DASHBOARD_CONFIG_TOML_SECRET" ]; then
+            printf '%s' "$DASHBOARD_CONFIG_TOML_SECRET" > config.toml
+          elif [ -n "$DASHBOARD_CONFIG_TOML_VAR" ]; then
+            printf '%s' "$DASHBOARD_CONFIG_TOML_VAR" > config.toml
+          else
+            echo "DASHBOARD_CONFIG_TOML secret or variable is required" >&2
+            exit 1
+          fi
+
       - name: Test
         run: go test ./...
 
@@ -76,8 +90,6 @@ jobs:
       - name: Deploy GitHub Pages branch
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          DASHBOARD_ANALYTICS_SRC: ${{ vars.DASHBOARD_ANALYTICS_SRC }}
-          DASHBOARD_ANALYTICS_DOMAIN: ${{ vars.DASHBOARD_ANALYTICS_DOMAIN }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"

@@ -17,7 +17,7 @@ const state = { mode: 'ratio', sortKey: 'deletionRatioPct', sortDir: 'desc', use
 const els = {
   themeToggle: document.getElementById('themeToggle'), controls: document.getElementById('dashboardFilterControls'), filterToggle: document.getElementById('filterToggle'), filterSummary: document.getElementById('filterSummary'), search: document.getElementById('searchInput'), postcode: document.getElementById('postcodeFilter'), bezirk: document.getElementById('bezirkFilter'), banner: document.getElementById('bannerFilter'), range: document.getElementById('rangeFilter'), category: document.getElementById('categoryFilter'), minReviews: document.getElementById('minReviews'), reset: document.getElementById('resetFilters'), tbody: document.querySelector('#placesTable tbody'), resultCount: document.getElementById('resultCount'), tableTitle: document.getElementById('tableTitle'), mapCount: document.getElementById('mapCount'), nearbyStatus: document.getElementById('nearbyStatus'), showMore: document.getElementById('showMoreRows')
 };
-const titles = { all: 'Alle Orte', removed: 'Meiste entfernte Bewertungen', ratio: 'Höchste Lösch-Quote', worst: 'Schlechtestes Worst-Case-Rating', clean: 'Orte ohne Löschbanner', nearby: 'In meiner Nähe' };
+const titles = { all: 'Alle Orte', removed: 'Höchste Hinweisspannen', ratio: 'Geschätzter Hinweis-Anteil', worst: 'Hypothetisches Worst-Case-Rating', clean: 'Orte ohne sichtbaren Hinweis', nearby: 'In meiner Nähe' };
 
 function finiteNumber(value) { return Number.isFinite(value) ? value : null; }
 function decodeCoord(base, offset) { return Number.isFinite(offset) ? base + offset / COORD_SCALE : null; }
@@ -79,7 +79,7 @@ let markerLayer = null;
 let tileLayer = null;
 let mapUnavailable = false;
 let mapLoadStarted = false;
-let mapObserver = null;
+let mapConsentGranted = false;
 let pendingMapRows = null;
 let pendingMapAllRows = null;
 let mapHintTimer = null;
@@ -267,9 +267,9 @@ function updateKpis(rows) {
 }
 function hasCoords(row) { return Number.isFinite(row.lat) && Number.isFinite(row.lng); }
 function markerColor(row) {
-  if (!row.hasBanner) return colorVar('--green', '#2d7b3f');
-  if ((row.deletionRatioPct || 0) >= 10) return colorVar('--red', '#c9332c');
-  return colorVar('--orange', '#ef7d16');
+  if (!row.hasBanner) return colorVar('--marker-clean', '#8a8e94');
+  if ((row.deletionRatioPct || 0) >= 10) return colorVar('--marker-high', '#3c4e6b');
+  return colorVar('--marker-mid', '#5b7b8e');
 }
 function markerMode(row) { return row.hasBanner ? 'ratio' : 'clean'; }
 function isMapModifier(event) { return event.ctrlKey || event.metaKey || event.altKey; }
@@ -346,30 +346,28 @@ function loadLeaflet() {
     document.head.appendChild(script);
   });
 }
-function scheduleMapLoad(rows, allFilteredRows) {
+function startMapLoad(rows, allFilteredRows) {
   pendingMapRows = rows;
   pendingMapAllRows = allFilteredRows || rows;
-  if (placesMap || mapLoadStarted || mapUnavailable || mapObserver) return;
+  if (placesMap || mapLoadStarted || mapUnavailable) return;
   const root = document.getElementById('placesMap');
-  const start = () => {
-    if (placesMap || mapLoadStarted || mapUnavailable) return;
-    mapLoadStarted = true;
-    root.innerHTML = '<div class="map-empty">Karte wird geladen …</div>';
-    loadLeaflet().then(() => renderMap(pendingMapRows || [], pendingMapAllRows || pendingMapRows || [])).catch(() => {
-      mapUnavailable = true;
-      root.innerHTML = '<div class="map-empty">Karte konnte nicht geladen werden. Internetzugriff auf Leaflet/Kartenkacheln prüfen.</div>';
-    });
-  };
-  if ('IntersectionObserver' in window) {
-    mapObserver = new IntersectionObserver(entries => {
-      if (!entries.some(entry => entry.isIntersecting)) return;
-      mapObserver.disconnect();
-      start();
-    }, { rootMargin: '500px' });
-    mapObserver.observe(root);
-  } else {
-    start();
-  }
+  mapLoadStarted = true;
+  root.innerHTML = '<div class="map-empty">Karte wird geladen …</div>';
+  loadLeaflet().then(() => renderMap(pendingMapRows || [], pendingMapAllRows || pendingMapRows || [])).catch(() => {
+    mapUnavailable = true;
+    root.innerHTML = '<div class="map-empty">Karte konnte nicht geladen werden. Internetzugriff auf Leaflet/Kartenkacheln prüfen.</div>';
+  });
+}
+function setupMapConsent() {
+  const root = document.getElementById('placesMap');
+  if (!root) return;
+  root.addEventListener('click', event => {
+    const btn = event.target.closest('#mapConsentLoad');
+    if (!btn) return;
+    if (mapConsentGranted) return;
+    mapConsentGranted = true;
+    startMapLoad(pendingMapRows || [], pendingMapAllRows || pendingMapRows || []);
+  });
 }
 function initMap() {
   if (placesMap || mapUnavailable) return Boolean(placesMap);
@@ -436,7 +434,7 @@ function renderBezirkLayer(rows) {
       fillOpacity: isSelected ? .18 : (hasRows ? Math.min(.16, .035 + ratio / 120) : .018),
       interactive: true
     };
-    const tooltip = '<strong>' + esc(district.label) + '</strong><br>' + n(stat.rows) + ' Orte · ' + n(stat.banners) + ' Banner · ' + pct(ratio);
+    const tooltip = '<strong>' + esc(district.label) + '</strong><br>' + n(stat.rows) + ' Orte · ' + n(stat.banners) + ' Hinweise · ' + pct(ratio);
     for (const polygon of district.polygons) {
       const layer = L.polygon(polygon, style);
       layer.bindTooltip(tooltip, { sticky: true, direction: 'top' });
@@ -453,8 +451,13 @@ function renderBezirkLayer(rows) {
 function renderMap(rows, allFilteredRows) {
   const mapped = rows.filter(hasCoords);
   els.mapCount.textContent = n(mapped.length) + ' von ' + n(rows.length);
+  if (!mapConsentGranted && !placesMap) {
+    pendingMapRows = rows;
+    pendingMapAllRows = allFilteredRows || rows;
+    return;
+  }
   if (typeof L === 'undefined' && !placesMap) {
-    scheduleMapLoad(rows, allFilteredRows);
+    startMapLoad(rows, allFilteredRows);
     return;
   }
   if (!initMap()) return;
@@ -499,7 +502,7 @@ function renderDistribution(rows) {
   const bins = ['über 250','201–250','151–200','101–150','51–100','21–50','11–20','6–10','2–5','1'];
   const counts = bins.map(bin => ({ bin, count: banners.filter(row => row.removedRange === bin).length })).filter(item => item.count > 0);
   const max = Math.max(1, ...counts.map(item => item.count));
-  document.getElementById('distribution').innerHTML = counts.map(item => '<div class="dist-row"><strong>' + esc(item.bin) + '</strong><div class="dist-track"><div class="dist-fill" style="width:' + (item.count / max * 100) + '%"></div></div><span>' + n(item.count) + '</span></div>').join('') || '<p>Keine Banner im Filter.</p>';
+  document.getElementById('distribution').innerHTML = counts.map(item => '<div class="dist-row"><strong>' + esc(item.bin) + '</strong><div class="dist-track"><div class="dist-fill" style="width:' + (item.count / max * 100) + '%"></div></div><span>' + n(item.count) + '</span></div>').join('') || '<p>Keine Hinweise im Filter.</p>';
 }
 function renderRatioHistogram(rows) {
   const root = document.getElementById('ratioHistogram');
@@ -538,7 +541,7 @@ function renderBezirkSummary(rows) {
     }
   }
   const items = [...groups.values()].sort((a, b) => (a.label === 'Ohne Bezirk') - (b.label === 'Ohne Bezirk') || (b.banners / Math.max(b.rows, 1)) - (a.banners / Math.max(a.rows, 1)) || b.banners - a.banners || b.rows - a.rows).slice(0, 12);
-  document.getElementById('bezirkSummary').innerHTML = items.map(item => '<button type="button" class="bezirk-row" data-bezirk="' + esc(item.label) + '"><strong>' + esc(item.label) + '</strong><span>' + n(item.rows) + ' Orte</span><span>' + n(item.banners) + ' Banner</span><span>' + pct(item.banners / Math.max(item.rows, 1) * 100) + '</span></button>').join('') || '<p>Keine Bezirksdaten im Filter.</p>';
+  document.getElementById('bezirkSummary').innerHTML = items.map(item => '<button type="button" class="bezirk-row" data-bezirk="' + esc(item.label) + '"><strong>' + esc(item.label) + '</strong><span>' + n(item.rows) + ' Orte</span><span>' + n(item.banners) + ' Hinweise</span><span>' + pct(item.banners / Math.max(item.rows, 1) * 100) + '</span></button>').join('') || '<p>Keine Bezirksdaten im Filter.</p>';
 }
 function renderParentSummary(rows) {
   const groups = new Map();
@@ -553,7 +556,7 @@ function renderParentSummary(rows) {
     }
   }
   const items = [...groups.values()].sort((a, b) => (b.banners / Math.max(b.rows, 1)) - (a.banners / Math.max(a.rows, 1)) || b.banners - a.banners || b.rows - a.rows);
-  document.getElementById('parentSummary').innerHTML = items.map(item => '<div class="bezirk-row"><strong>' + esc(item.label) + '</strong><span>' + n(item.rows) + ' Orte</span><span>' + n(item.banners) + ' Banner</span><span>' + pct(item.banners / Math.max(item.rows, 1) * 100) + '</span></div>').join('') || '<p>Keine Kategorie-Daten im Filter.</p>';
+  document.getElementById('parentSummary').innerHTML = items.map(item => '<div class="bezirk-row"><strong>' + esc(item.label) + '</strong><span>' + n(item.rows) + ' Orte</span><span>' + n(item.banners) + ' Hinweise</span><span>' + pct(item.banners / Math.max(item.rows, 1) * 100) + '</span></div>').join('') || '<p>Keine Kategorie-Daten im Filter.</p>';
 }
 function updatePanels(rows) {
   const banners = bannerRows(rows);
@@ -588,7 +591,7 @@ function renderTable(rows) {
     const rank = index + 1;
     const distance = state.mode === 'nearby' ? '<span class="entry-address">Entfernung: ' + esc(distanceLabel(rowDistanceKm(row))) + '</span>' : '';
     const address = row.address ? '<span class="entry-address">' + esc(row.address) + '</span>' : '';
-    return '<tr data-entry-id="' + esc(row.id) + '"><td class="rank">' + rank + '</td><td class="name"><a href="' + esc(row.url) + '" target="_blank" rel="noopener noreferrer">' + esc(row.name) + '</a>' + distance + address + '</td><td>' + esc(row.bezirkLabel || '–') + '</td><td>' + esc(row.postcode) + '</td><td class="num">' + rating(row.rating) + '</td><td class="num">' + n(row.reviewCount) + '</td><td>' + (row.hasBanner ? '<span class="pill bad">Löschbanner</span>' : '<span class="pill">kein Löschbanner</span>') + '</td><td class="num">' + (row.hasBanner ? esc(row.removedRange) : '–') + '</td><td class="num">' + (row.hasBanner ? rating(row.removedEstimate) : '–') + '</td><td class="num">' + pct(row.deletionRatioPct) + '</td><td class="num">' + rating(row.realRatingAdjusted, 2) + '</td><td>' + esc(readAtLabel(row.readAt)) + '</td><td>' + esc(row.category) + '</td></tr>';
+    return '<tr data-entry-id="' + esc(row.id) + '"><td class="rank">' + rank + '</td><td class="name"><a href="' + esc(row.url) + '" target="_blank" rel="noopener noreferrer">' + esc(row.name) + '</a>' + distance + address + '</td><td>' + esc(row.bezirkLabel || '–') + '</td><td>' + esc(row.postcode) + '</td><td class="num">' + rating(row.rating) + '</td><td class="num">' + n(row.reviewCount) + '</td><td>' + (row.hasBanner ? '<span class="pill bad">Google-Hinweis</span>' : '<span class="pill">kein Hinweis</span>') + '</td><td class="num">' + (row.hasBanner ? esc(row.removedRange) : '–') + '</td><td class="num">' + (row.hasBanner ? rating(row.removedEstimate) : '–') + '</td><td class="num">' + pct(row.deletionRatioPct) + '</td><td class="num">' + rating(row.realRatingAdjusted, 2) + '</td><td>' + esc(readAtLabel(row.readAt)) + '</td><td>' + esc(row.category) + '</td></tr>';
   }).join('');
   document.querySelectorAll('th button[data-sort]').forEach(button => {
     const active = button.dataset.sort === state.sortKey;
@@ -713,7 +716,7 @@ document.querySelector('.chips').addEventListener('click', event => {
 function updateSubChips(mode) {
   const configs = {
     all: [
-      { label: '🔴 Mit Banner', test: () => els.banner.value === 'banner', apply: v => { els.banner.value = v ? 'banner' : 'all'; } },
+      { label: '🔴 Mit Hinweis', test: () => els.banner.value === 'banner', apply: v => { els.banner.value = v ? 'banner' : 'all'; } },
       { label: '🗺️ Altstadt', test: () => els.bezirk.value === 'Altstadt, St. Lorenz', apply: v => { els.bezirk.value = v ? 'Altstadt, St. Lorenz' : ''; } },
     ],
     ratio: [
@@ -730,7 +733,7 @@ function updateSubChips(mode) {
       { label: 'Min. 200 Rez.', test: () => Number(els.minReviews.value) === 200, apply: v => { els.minReviews.value = v ? 200 : 0; } },
       { label: '🍽️ Nur Gastro', test: () => els.category.value === 'parent:Gastronomie', apply: v => { els.category.value = v ? 'parent:Gastronomie' : ''; } },
       { label: '🏨 Nur Hotels', test: () => els.category.value === 'parent:Beherbergung', apply: v => { els.category.value = v ? 'parent:Beherbergung' : ''; } },
-      { label: '> 50 entfernt', test: () => els.range.value === '51 bis 100 Bewertungen', apply: v => { els.range.value = v ? '51 bis 100 Bewertungen' : ''; } },
+      { label: '> 50 Näherungswert', test: () => els.range.value === '51–100', apply: v => { els.range.value = v ? '51–100' : ''; } },
     ],
     worst: [
       { label: 'Min. 50 Rez.', test: () => Number(els.minReviews.value) === 50, apply: v => { els.minReviews.value = v ? 50 : 0; } },
@@ -746,7 +749,7 @@ function updateSubChips(mode) {
       { label: '🗺️ Altstadt', test: () => els.bezirk.value === 'Altstadt, St. Lorenz', apply: v => { els.bezirk.value = v ? 'Altstadt, St. Lorenz' : ''; } },
     ],
     nearby: [
-      { label: '🔴 Nur mit Banner', test: () => els.banner.value === 'banner', apply: v => { els.banner.value = v ? 'banner' : 'all'; } },
+      { label: '🔴 Nur mit Hinweis', test: () => els.banner.value === 'banner', apply: v => { els.banner.value = v ? 'banner' : 'all'; } },
       { label: '🍽️ Nur Gastro', test: () => els.category.value === 'parent:Gastronomie', apply: v => { els.category.value = v ? 'parent:Gastronomie' : ''; } },
     ],
   };
@@ -763,4 +766,5 @@ function updateSubChips(mode) {
 }
 
 updateThemeToggle();
+setupMapConsent();
 render();

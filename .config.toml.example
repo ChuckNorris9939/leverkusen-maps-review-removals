@@ -1,0 +1,34 @@
+# Copy this file to config.toml for local/private dashboard settings.
+# config.toml is ignored by git because it may contain legal contact data.
+
+city = "Nürnberg"
+input = "output/places.json"
+output = "output/charts/nuernberg_dashboard.html"
+site_domain = "nuernberg-maps-review-removals.patwoz.dev"
+site_url = "https://nuernberg-maps-review-removals.patwoz.dev"
+site_output = "public"
+
+[legal]
+# Set to false or remove this section to omit methodik/korrektur/impressum/datenschutz pages.
+enabled = true
+name = "Patrick Wozniak"
+email = "hi@example.com"
+
+address_lines = [
+  "c/o Example GmbH",
+  "Example Street 1",
+  "90443 Nürnberg",
+  "Deutschland",
+]
+
+note = "Example GmbH ist nicht Betreiberin dieses Angebots. Sie dient ausschließlich als Zustellanschrift."
+post_handler = "Example GmbH"
+
+[analytics]
+# Optional Plausible Analytics settings. Remove this section to disable analytics.
+src = "https://a.patwoz.dev/js/script.js"
+domain = "nuernberg-maps-review-removals.patwoz.dev"
+
+[places_api]
+# Optional. Required only for `make scrape ARGS="--places-api-discovery ..."`.
+api_key = ""

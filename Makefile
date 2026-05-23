@@ -1,12 +1,4 @@
-.PHONY: setup test check validate scrape backfill charts dashboard dashboard-build open-dashboard site deploy-pages all
-
-ifneq (,$(wildcard .env))
-include .env
-export
-endif
-
-SITE_DOMAIN ?= nuernberg-maps-review-removals.patwoz.dev
-SITE_URL ?= https://$(SITE_DOMAIN)
+.PHONY: setup test check validate scrape backfill charts dashboard dashboard-build site deploy-pages all
 
 setup:
 	go mod download
@@ -30,34 +22,14 @@ backfill:
 charts:
 	go run ./cmd/charts $(ARGS)
 
-dashboard: dashboard-build open-dashboard
+dashboard: dashboard-build
 
 dashboard-build:
 	go run ./cmd/dashboard $(ARGS)
 
-open-dashboard:
-	@file="$$(pwd)/output/charts/nuernberg_dashboard.html"; \
-	if command -v open >/dev/null 2>&1; then \
-		open "$$file"; \
-	elif command -v xdg-open >/dev/null 2>&1; then \
-		xdg-open "$$file" >/dev/null 2>&1 & \
-	else \
-		echo "Dashboard geschrieben: $$file"; \
-	fi
-
 site:
 	go run ./cmd/charts --png $(ARGS)
-	go run ./cmd/dashboard
-	rm -rf public
-	mkdir -p public/charts public/data
-	touch public/.nojekyll
-	echo "$(SITE_DOMAIN)" > public/CNAME
-	printf "User-agent: *\nAllow: /\nSitemap: $(SITE_URL)/sitemap.xml\n" > public/robots.txt
-	@lastmod="$$(date -u +%Y-%m-%d)"; \
-	printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' "  <url><loc>$(SITE_URL)/</loc><lastmod>$$lastmod</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>" "  <url><loc>$(SITE_URL)/charts/nuernberg_most_removed.html</loc><lastmod>$$lastmod</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>" '</urlset>' > public/sitemap.xml
-	cp output/charts/nuernberg_dashboard.html public/index.html
-	cp output/charts/* public/charts/
-	cp output/metadata.json output/places.csv public/data/
+	go run ./cmd/dashboard --site $(ARGS)
 
 deploy-pages: site
 	@tmp=$$(mktemp -d); \

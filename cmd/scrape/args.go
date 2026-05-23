@@ -10,6 +10,7 @@ import (
 )
 
 type args struct {
+	Config             string
 	City               string
 	Postcodes          []string
 	Queries            []string
@@ -41,6 +42,7 @@ func parseArgs(argv []string) (args, error) {
 	postcodesSet := false
 	postcodesValue := ""
 	out := args{
+		Config:             "config.toml",
 		City:               mapsreview.DefaultCity,
 		Postcodes:          mapsreview.NurembergPostcodes,
 		Queries:            mapsreview.DefaultQueries,
@@ -62,6 +64,8 @@ func parseArgs(argv []string) (args, error) {
 	for i := 0; i < len(argv); i++ {
 		key, value, consume := mapsreview.SplitArg(argv, i)
 		switch key {
+		case "--config":
+			out.Config = value
 		case "--city":
 			out.City = value
 		case "--postcodes":
@@ -152,6 +156,7 @@ func printHelp() {
   go run ./cmd/scrape --postcodes 90402,90403 --queries restaurant,café,imbiss
 
 Options:
+  --config <path>           TOML config path for optional Places API key. Default: config.toml.
   --city <name>             City name for discovery. Default: %s. For other cities, pass --postcodes explicitly.
   --postcodes <all|csv>     PLZ list. Default: all known Nürnberg PLZ.
   --queries <csv>           Google Maps search terms. Default: %s.
@@ -160,7 +165,7 @@ Options:
   --cdp-url <ws-url>        Experimental: use an existing CDP browser instead of Chrome, e.g. Lightpanda on ws://127.0.0.1:9333.
   --discovery <path>        Discovery JSON path. Default: output/discovery.json.
   --metadata <path>         Metadata JSON path. Default: output/metadata.json.
-  --places-api-discovery    Use official Places API Text Search ID-only discovery. Reads GOOGLE_MAPS_API_KEY from env or .env.
+  --places-api-discovery    Use official Places API Text Search ID-only discovery. Reads [places_api].api_key from config.toml.
   --places-api-pages <n>    Places API result pages per postcode/query. Default: 1 (default searches stay under 1,000 requests/day).
   --discovery-only          Only create/update the discovery JSON.
   --scrape-only             Skip discovery; scrape the discovery JSON.
