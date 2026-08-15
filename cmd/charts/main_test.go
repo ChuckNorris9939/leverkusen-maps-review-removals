@@ -117,7 +117,7 @@ func TestChartFilePrefix(t *testing.T) {
 		city string
 		want string
 	}{
-		{city: mapsreview.DefaultCity, want: "nuernberg"},
+		{city: mapsreview.DefaultCity, want: "leverkusen"},
 		{city: "Fürth", want: "fuerth"},
 		{city: "München Süd", want: "muenchen-sued"},
 		{city: "***", want: "city"},

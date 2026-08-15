@@ -403,7 +403,7 @@ func writeMostRemovedHTML(file string, ranked []mapsreview.Place, allRows []maps
 
 func chartFilePrefix(city string) string {
 	if mapsreview.IsDefaultCity(city) {
-		return "nuernberg"
+		return "leverkusen"
 	}
 	city = strings.ToLower(strings.TrimSpace(city))
 	city = strings.NewReplacer(

@@ -147,11 +147,11 @@ func TestMakeHTMLIncludesSEOMetadataAndSummary(t *testing.T) {
 
 	html := makeHTML(args{City: mapsreview.DefaultCity, SiteURL: "https://nuernberg-maps-review-removals.patwoz.dev"}, data)
 	checks := []string{
-		`<meta name="description" content="Interaktives Nürnberg-Dashboard`,
+		`<meta name="description" content="Interaktives Leverkusen-Dashboard`,
 		`<link rel="canonical" href="https://nuernberg-maps-review-removals.patwoz.dev/">`,
 		`<meta property="og:type" content="website">`,
 		`<script type="application/ld+json">`,
-		`<h1 class="hero-title">Nürnberg Google-Maps-Bewertungen</h1>`,
+		`<h1 class="hero-title">Leverkusen Google-Maps-Bewertungen</h1>`,
 		`Einordnung`,
 		`Eigene Bewertung entfernt?`,
 		`Google-Einspruch`,
