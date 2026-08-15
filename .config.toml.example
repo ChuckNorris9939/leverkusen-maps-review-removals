@@ -1,33 +1,32 @@
 # Copy this file to config.toml for local/private dashboard settings.
 # config.toml is ignored by git because it may contain legal contact data.
 
-city = "Nürnberg"
+city = "Leverkusen"
 input = "output/places.json"
-output = "output/charts/nuernberg_dashboard.html"
-site_domain = "nuernberg-maps-review-removals.patwoz.dev"
-site_url = "https://nuernberg-maps-review-removals.patwoz.dev"
+output = "output/charts/leverkusen_dashboard.html"
+site_domain = "leverkusen-maps-review-removals.de"
+site_url = "https://leverkusen-maps-review-removals.de"
 site_output = "public"
 
 [legal]
 # Set to false or remove this section to omit methodik/korrektur/impressum/datenschutz pages.
 enabled = true
-name = "Patrick Wozniak"
-email = "hi@example.com"
+name = "Dein Name"
+email = "kontakt@leverkusen-maps-review-removals.de"
 
 address_lines = [
-  "c/o Example GmbH",
-  "Example Street 1",
-  "90443 Nürnberg",
+  "Musterstraße 1",
+  "51373 Leverkusen",
   "Deutschland",
 ]
 
-note = "Example GmbH ist nicht Betreiberin dieses Angebots. Sie dient ausschließlich als Zustellanschrift."
-post_handler = "Example GmbH"
+note = "Angaben gemäß § 5 TMG"
+post_handler = "Dein Name"
 
 [analytics]
 # Optional Plausible Analytics settings. Remove this section to disable analytics.
-src = "https://a.patwoz.dev/js/script.js"
-domain = "nuernberg-maps-review-removals.patwoz.dev"
+# src = "https://plausible.io/js/script.js"
+# domain = "leverkusen-maps-review-removals.de"
 
 [places_api]
 # Optional. Required only for `make scrape ARGS="--places-api-discovery ..."`.

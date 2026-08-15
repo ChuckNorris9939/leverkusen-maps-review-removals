@@ -10,18 +10,18 @@ const (
 	MetadataJSON  = "output/metadata.json"
 )
 
-var DefaultCity = "Nürnberg"
+var DefaultCity = "Leverkusen"
 
 func IsDefaultCity(city string) bool {
 	return strings.EqualFold(strings.TrimSpace(city), DefaultCity)
 }
 
-var NurembergPostcodes = []string{
-	"90402", "90403", "90408", "90409", "90411", "90419", "90425", "90427",
-	"90429", "90431", "90439", "90441", "90443", "90449", "90451", "90453",
-	"90455", "90459", "90461", "90469", "90471", "90473", "90475", "90478",
-	"90480", "90482", "90489", "90491",
+var LeverkusenPostcodes = []string{
+	"51371", "51373", "51375", "51377", "51379", "51381",
 }
+
+// NurembergPostcodes remains for backward compatibility in tests
+var NurembergPostcodes = LeverkusenPostcodes
 
 var DefaultQueries = []string{
 	// Gastro (original)
@@ -50,3 +50,5 @@ var NurembergPostcodeSet = func() map[string]bool {
 	}
 	return set
 }()
+
+var LeverkusenPostcodeSet = NurembergPostcodeSet

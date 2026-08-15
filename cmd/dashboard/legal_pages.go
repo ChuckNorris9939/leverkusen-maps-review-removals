@@ -95,7 +95,7 @@ func legalShell(title string, description string, body string) string {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>%s · Nürnberg Google-Maps-Bewertungen</title>
+  <title>%s · Leverkusen Google-Maps-Bewertungen</title>
   <meta name="description" content="%s">
   <style>body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#333;background:#fff}main{width:min(920px,calc(100vw - 32px));margin:42px auto 70px;line-height:1.6}nav{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:30px}a{color:#cf2a1b;font-weight:700;text-decoration:none}a:hover{text-decoration:underline}h1{font-size:clamp(30px,5vw,48px);line-height:1.1;margin:0 0 18px}h2{margin-top:30px;color:#222}.note,.card{padding:16px;border-left:5px solid #1f6f8b;background:#f6f6f6}@media(prefers-color-scheme:dark){body{color:#e7e2dc;background:#0e0c0b}h2{color:#fff5ec}.note,.card{background:#171412}}</style>
 </head>

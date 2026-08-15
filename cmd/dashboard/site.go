@@ -97,7 +97,7 @@ func writeSiteMeta(a args, out string) error {
 			return err
 		}
 	}
-	fmt.Fprintf(&b, "  <url><loc>%scharts/nuernberg_most_removed.html</loc><lastmod>%s</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>\n", siteURL, lastmod)
+	fmt.Fprintf(&b, "  <url><loc>%scharts/leverkusen_most_removed.html</loc><lastmod>%s</lastmod><changefreq>weekly</changefreq><priority>0.6</priority></url>\n", siteURL, lastmod)
 	b.WriteString("</urlset>\n")
 	return os.WriteFile(filepath.Join(out, "sitemap.xml"), []byte(b.String()), 0o644)
 }

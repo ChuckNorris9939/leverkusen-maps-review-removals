@@ -21,7 +21,7 @@ var dashboardJS string
 
 const (
 	defaultInput      = mapsreview.ResultsJSON
-	defaultOutput     = "output/charts/nuernberg_dashboard.html"
+	defaultOutput     = "output/charts/leverkusen_dashboard.html"
 	defaultConfigPath = "config.toml"
 )
 
@@ -244,7 +244,7 @@ func parseArgs(argv []string) (args, error) {
 			fmt.Printf(`Usage:
   go run ./cmd/dashboard
   go run ./cmd/dashboard --config config.toml
-  go run ./cmd/dashboard --input output/places.json --output output/charts/nuernberg_dashboard.html
+  go run ./cmd/dashboard --input output/places.json --output output/charts/leverkusen_dashboard.html
 
 Options:
   --config <path>                       TOML config file. Defaults to config.toml when present. CLI flags override config values.
