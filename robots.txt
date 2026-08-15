@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://leverkusen-maps-review-removals.de/sitemap.xml
