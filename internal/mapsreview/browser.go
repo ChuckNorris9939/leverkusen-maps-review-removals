@@ -30,6 +30,10 @@ func NewRemoteBrowserContext(cdpURL string) (context.Context, context.CancelFunc
 func NewBrowserContext(headless bool) (context.Context, context.CancelFunc) {
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
 		chromedp.Flag("headless", headless),
+		chromedp.Flag("no-sandbox", true),
+		chromedp.Flag("disable-dev-shm-usage", true),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.Flag("disable-software-rasterizer", true),
 		chromedp.Flag("lang", "de-DE"),
 		chromedp.Flag("blink-settings", "imagesEnabled=false"),
 		chromedp.UserAgent(UserAgent),
